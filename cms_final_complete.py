@@ -1,16 +1,20 @@
-from flask import Flask, render_template_string, redirect, url_for, request, flash, jsonify, send_from_directory, make_response
+=from flask import Flask, render_template_string, redirect, url_for, request, flash, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-from flask_cors import CORS
 import os
 import re
 import json
 import uuid
 from werkzeug.utils import secure_filename
 
-app = Flask(__name__, static_folder="dist", static_url_path="")
+from flask import Flask, jsonify, request, make_response
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+from flask_cors import CORS
+
+app = Flask(__name__)
 
 # Footer Links API Endpoint
 @app.route('/api/footer-links', methods=['GET'])
@@ -640,6 +644,9 @@ def save_uploaded_file(file, subfolder, file_type='image'):
     return None
 
 # Routes
+@app.route('/')
+def index():
+    return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -11795,21 +11802,25 @@ def get_featured_content():
         response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
         return response
 
-from flask import send_from_directory
+@app.route('/')
+def serve_frontend():
+    return render_template('index.html')
 
-# Serve React frontend for all non-API/admin/static routes
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
+
+# Serve Frontend for all non-API routes except admin paths
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
 def serve_frontend(path):
-    if path.startswith("admin") or path.startswith("api") or path.startswith("static"):
-        return "Not Found", 404
+    if path.startswith(('admin', 'login', 'dashboard', 'events', 'users', 'logout', 'api')):
+        return redirect(f'/{path}')
+    if path == "" or os.path.exists(os.path.join('dist', path)):
+        return send_from_directory('dist', 'index.html')
+    elif os.path.exists(os.path.join('dist', path)):
+        return send_from_directory('dist', path)
+    else:
+        return send_from_directory('dist', 'index.html')
 
-    file_path = os.path.join(app.static_folder, path)
-    if path != "" and os.path.exists(file_path):
-        return send_from_directory(app.static_folder, path)
-
-    # Fallback to index.html for React Router
-    return send_from_directory(app.static_folder, "index.html")
-
-
+@app.route('/assets/<path:filename>')
+def serve_assets(filename):
+    return send_from_directory('dist/assets', filename)
 

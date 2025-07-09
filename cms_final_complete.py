@@ -11,7 +11,7 @@ import uuid
 app = Flask(__name__, static_folder="dist", static_url_path="")
 CORS(app)
 app.secret_key = os.environ.get("SECRET_KEY", "default_secret_key")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///cms.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///instance/kesgrave_working.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
 

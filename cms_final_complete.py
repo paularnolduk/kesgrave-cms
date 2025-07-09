@@ -11802,3 +11802,6 @@ def get_featured_content():
         response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
         return response
 
+@app.route('/')
+def serve_frontend():
+    return render_template('index.html')

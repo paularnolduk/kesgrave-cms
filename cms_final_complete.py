@@ -11807,19 +11807,20 @@ def serve_frontend():
     return render_template('index.html')
 
 
-# Serve Frontend for all non-API routes except admin paths
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_static_files(path):
-    if path.startswith(('admin', 'login', 'dashboard', 'events', 'users', 'logout', 'api')):
-        return redirect(f'/{path}')
-    if path == "" or os.path.exists(os.path.join('dist', path)):
-        return send_from_directory('dist', 'index.html')
-    elif os.path.exists(os.path.join('dist', path)):
-        return send_from_directory('dist', path)
-    else:
-        return send_from_directory('dist', 'index.html')
+# Serve frontend from dist/
+@app.route('/')
+def serve_index():
+    return send_from_directory('dist', 'index.html')
 
 @app.route('/assets/<path:filename>')
 def serve_assets(filename):
     return send_from_directory('dist/assets', filename)
+
+@app.route('/<path:path>')
+def serve_static_files(path):
+    file_path = os.path.join('dist', path)
+    if os.path.exists(file_path):
+        return send_from_directory('dist', path)
+    else:
+        # Let Flask handle 404 or CMS routing
+        return redirect(url_for('login'))  # Optional fallback

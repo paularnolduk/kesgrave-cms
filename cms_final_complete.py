@@ -11812,7 +11812,6 @@ def serve_frontend():
 def serve_frontend():
     return send_from_directory('dist', 'index.html')
 
-# Serve other static files (like JS, CSS, images)
 @app.route('/<path:path>')
 def serve_static(path):
     file_path = os.path.join('dist', path)
@@ -11820,3 +11819,4 @@ def serve_static(path):
         return send_from_directory('dist', path)
     else:
         return send_from_directory('dist', 'index.html')
+

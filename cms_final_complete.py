@@ -11808,6 +11808,9 @@ def serve_frontend():
 
 
 # Serve the frontend's index.html at root
+from flask import send_from_directory
+import os
+
 @app.route('/')
 def serve_frontend():
     return send_from_directory('dist', 'index.html')
@@ -11819,4 +11822,5 @@ def serve_static(path):
         return send_from_directory('dist', path)
     else:
         return send_from_directory('dist', 'index.html')
+
 

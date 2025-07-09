@@ -11810,7 +11810,7 @@ def serve_frontend():
 # Serve Frontend for all non-API routes except admin paths
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
-def serve_frontend(path):
+def serve_static_files(path):
     if path.startswith(('admin', 'login', 'dashboard', 'events', 'users', 'logout', 'api')):
         return redirect(f'/{path}')
     if path == "" or os.path.exists(os.path.join('dist', path)):

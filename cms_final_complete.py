@@ -1,20 +1,16 @@
-from flask import Flask, render_template_string, redirect, url_for, request, flash, jsonify, send_from_directory
+from flask import Flask, render_template_string, redirect, url_for, request, flash, jsonify, send_from_directory, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+from flask_cors import CORS
 import os
 import re
 import json
 import uuid
 from werkzeug.utils import secure_filename
 
-from flask import Flask, jsonify, request, make_response
-from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
-from flask_cors import CORS
-
-app = Flask(__name__)
+app = Flask(__name__, static_folder="dist", static_url_path="")
 
 # Footer Links API Endpoint
 @app.route('/api/footer-links', methods=['GET'])
@@ -11802,22 +11798,17 @@ def get_featured_content():
         response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
         return response
 
-@app.route('/')
-def serve_frontend():
-    return render_template('index.html')
-
-
-# Serve the frontend's index.html at root
 from flask import send_from_directory
-import os
 
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_static_or_index(path):
+    if path.startswith("admin") or path.startswith("api") or path.startswith("static"):
+        return "Not Found", 404
+    full_path = os.path.join(app.static_folder, path)
+    if path != "" and os.path.exists(full_path):
+        return send_from_directory(app.static_folder, path)
+    return send_from_directory(app.static_folder, "index.html")
 
-@app.route('/<path:path>')
-def serve_static(path):
-    file_path = os.path.join('dist', path)
-    if os.path.exists(file_path):
-        return send_from_directory('dist', path)
-    else:
-        return send_from_directory('dist', 'index.html')
 
 

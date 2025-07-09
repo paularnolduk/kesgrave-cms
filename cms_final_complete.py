@@ -11811,9 +11811,6 @@ def serve_frontend():
 from flask import send_from_directory
 import os
 
-@app.route('/')
-def serve_frontend():
-    return send_from_directory('dist', 'index.html')
 
 @app.route('/<path:path>')
 def serve_static(path):

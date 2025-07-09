@@ -11807,20 +11807,16 @@ def serve_frontend():
     return render_template('index.html')
 
 
-# Serve frontend from dist/
+# Serve the frontend's index.html at root
 @app.route('/')
-def serve_index():
+def serve_frontend():
     return send_from_directory('dist', 'index.html')
 
-@app.route('/assets/<path:filename>')
-def serve_assets(filename):
-    return send_from_directory('dist/assets', filename)
-
+# Serve other static files (like JS, CSS, images)
 @app.route('/<path:path>')
-def serve_static_files(path):
+def serve_static(path):
     file_path = os.path.join('dist', path)
     if os.path.exists(file_path):
         return send_from_directory('dist', path)
     else:
-        # Let Flask handle 404 or CMS routing
-        return redirect(url_for('login'))  # Optional fallback
+        return send_from_directory('dist', 'index.html')

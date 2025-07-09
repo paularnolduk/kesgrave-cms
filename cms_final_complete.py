@@ -640,9 +640,6 @@ def save_uploaded_file(file, subfolder, file_type='image'):
     return None
 
 # Routes
-@app.route('/')
-def index():
-    return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -11800,14 +11797,18 @@ def get_featured_content():
 
 from flask import send_from_directory
 
+# Serve React frontend for all non-API/admin/static routes
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
-def serve_static_or_index(path):
+def serve_frontend(path):
     if path.startswith("admin") or path.startswith("api") or path.startswith("static"):
         return "Not Found", 404
-    full_path = os.path.join(app.static_folder, path)
-    if path != "" and os.path.exists(full_path):
+
+    file_path = os.path.join(app.static_folder, path)
+    if path != "" and os.path.exists(file_path):
         return send_from_directory(app.static_folder, path)
+
+    # Fallback to index.html for React Router
     return send_from_directory(app.static_folder, "index.html")
 
 

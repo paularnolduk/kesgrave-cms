@@ -14,7 +14,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_cors import CORS
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="dist", static_url_path="")
 
 # Footer Links API Endpoint
 @app.route('/api/footer-links', methods=['GET'])
@@ -11803,20 +11803,22 @@ def get_featured_content():
         return response
 
 
-# Serve Frontend for all non-API routes except admin paths
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_frontend(path):
-    if path.startswith(('admin', 'login', 'dashboard', 'events', 'users', 'logout', 'api')):
-        return redirect(f'/{path}')
-    if path == "" or os.path.exists(os.path.join('dist', path)):
-        return send_from_directory('dist', 'index.html')
-    elif os.path.exists(os.path.join('dist', path)):
-        return send_from_directory('dist', path)
-    else:
-        return send_from_directory('dist', 'index.html')
+# Serve Frontend from /dist unless it's an admin or API route
+from flask import send_from_directory
 
-@app.route('/assets/<path:filename>')
-def serve_assets(filename):
-    return send_from_directory('dist/assets', filename)
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_frontend(path):
+    # If it's admin or static/api, we don't want to serve the frontend
+    if path.startswith("admin") or path.startswith("api") or path.startswith("static") or path.startswith("login"):
+        return "Not Found", 404
+
+    # Check if the file exists in dist (index.html and assets)
+    full_path = os.path.join(app.static_folder, path)
+    if path != "" and os.path.exists(full_path):
+        return send_from_directory(app.static_folder, path)
+
+    # Otherwise serve index.html for frontend routing
+    return send_from_directory(app.static_folder, "index.html")
+
 

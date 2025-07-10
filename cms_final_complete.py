@@ -52,6 +52,17 @@ class Slide(db.Model):
     created_at = db.Column(db.DateTime)
     updated_at = db.Column(db.DateTime)
 
+class QuickLink(db.Model):
+    __tablename__ = 'homepage_quicklink'
+    id = db.Column(db.Integer, primary_key=True)
+    label = db.Column(db.String(255))
+    url = db.Column(db.String(255))
+    icon = db.Column(db.String(100))
+    sort_order = db.Column(db.Integer)
+    is_active = db.Column(db.Boolean)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
+
 class Councillor(db.Model):
     __tablename__ = 'councillor'
     id = db.Column(db.Integer, primary_key=True)
@@ -103,7 +114,6 @@ class ContentBlock(db.Model):
 def get_homepage_slides():
     try:
         slides = Slide.query.all()
-        print(f"\u2705 Slides found: {len(slides)}")
         return jsonify([
             {
                 "id": s.id,
@@ -120,22 +130,24 @@ def get_homepage_slides():
                 "updated_at": s.updated_at
             } for s in slides])
     except Exception as e:
-        print("\u274C Error loading slides:", e)
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": "Failed to load slides"}), 500
+
+@app.route('/api/homepage/quick-links')
+def get_quick_links():
+    links = QuickLink.query.all()
+    return jsonify([{ "id": l.id, "label": l.label, "url": l.url, "icon": l.icon } for l in links])
 
 @app.route('/api/councillors')
 def get_councillors():
     councillors = Councillor.query.all()
     return jsonify([{ "id": c.id, "name": c.name, "role": c.role, "contact": c.contact, "image_url": c.image_url } for c in councillors])
 
-@app.route('/api/meetings')
+@app.route('/api/homepage/meetings')
 def get_meetings():
     meetings = Meeting.query.all()
     return jsonify([{ "id": m.id, "title": m.title, "date": m.date, "document_url": m.document_url } for m in meetings])
 
-@app.route('/api/events')
+@app.route('/api/homepage/events')
 def get_events():
     events = Event.query.all()
     return jsonify([{ "id": e.id, "title": e.title, "description": e.description, "date": e.date, "location": e.location } for e in events])
@@ -149,15 +161,12 @@ def get_content_section(section):
 def debug_counts():
     return jsonify({
         "slides": Slide.query.count(),
+        "quick_links": QuickLink.query.count(),
         "councillors": Councillor.query.count(),
         "meetings": Meeting.query.count(),
         "events": Event.query.count(),
         "content_blocks": ContentBlock.query.count()
     })
-
-@app.route('/api/councillor-tags')
-def get_councillor_tags():
-    return jsonify([])
 
 # === Admin/CMS Routes ===
 @app.route("/admin")

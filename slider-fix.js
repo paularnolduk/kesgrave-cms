@@ -67,7 +67,8 @@
             // Set background image
             if (slideData.image) {
                 const imageUrl = slideData.image;
-                slide.style.backgroundImage = `url('${imageUrl}'), linear-gradient(135deg, rgba(44, 95, 45, 0.8) 0%, rgba(151, 188, 98, 0.8) 100%)`;
+                slide.style.backgroundImage = `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('${imageUrl}')`;
+		slide.style.backgroundRepeat = 'no-repeat';
                 slide.style.backgroundSize = 'cover';
                 slide.style.backgroundPosition = 'center';
                 slide.style.backgroundBlendMode = 'overlay';

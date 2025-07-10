@@ -40,8 +40,17 @@ except Exception as e:
 class Slide(db.Model):
     __tablename__ = 'homepage_slide'
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(100))
-    image_url = db.Column(db.String(200))
+    title = db.Column(db.String(200))
+    introduction = db.Column(db.Text)
+    image_filename = db.Column(db.String(255))
+    button_name = db.Column(db.String(100))
+    button_url = db.Column(db.String(500))
+    open_method = db.Column(db.String(20))
+    is_featured = db.Column(db.Boolean, default=False)
+    sort_order = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 class Councillor(db.Model):
     __tablename__ = 'councillor'
@@ -77,7 +86,21 @@ def get_homepage_slides():
     try:
         slides = Slide.query.all()
         print(f"\u2705 Slides found: {len(slides)}")
-        return jsonify([{"id": s.id, "title": s.title, "image_url": s.image_url} for s in slides])
+        return jsonify([
+            {
+                "id": s.id,
+                "title": s.title,
+                "introduction": s.introduction,
+                "image_filename": s.image_filename,
+                "button_name": s.button_name,
+                "button_url": s.button_url,
+                "open_method": s.open_method,
+                "is_featured": s.is_featured,
+                "sort_order": s.sort_order,
+                "is_active": s.is_active,
+                "created_at": s.created_at,
+                "updated_at": s.updated_at
+            } for s in slides])
     except Exception as e:
         print("\u274C Error loading slides:", e)
         import traceback

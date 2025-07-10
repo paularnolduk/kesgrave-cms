@@ -39,7 +39,7 @@ class Slide(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.Text)
     introduction = db.Column(db.Text)
-    image = db.Column(db.Text)
+    filename = db.Column(db.Text)  # change from `image`
     button_text = db.Column(db.Text)
     button_url = db.Column(db.Text)
     open_method = db.Column(db.Text)

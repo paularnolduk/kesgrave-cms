@@ -26,44 +26,46 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
-# Debug DB connection and list tables
+# Debug DB connection
 try:
     conn = sqlite3.connect(db_path)
-    print("✅ Database connected successfully")
-
+    print("\u2705 Database connected successfully")
     tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
-    print("📋 Tables in DB:", tables)
-
+    print("\ud83d\udccb Tables in DB:", tables)
     conn.close()
 except Exception as e:
-    print("❌ Failed to connect to or inspect DB:", e)
-
+    print("\u274C Failed to connect to DB:", e)
 
 # === Models ===
 class Slide(db.Model):
+    __tablename__ = 'homepage_slide'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100))
     image_url = db.Column(db.String(200))
 
 class Councillor(db.Model):
+    __tablename__ = 'councillor'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100))
     role = db.Column(db.String(100))
     contact = db.Column(db.String(200))
 
 class Meeting(db.Model):
+    __tablename__ = 'meeting'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100))
     date = db.Column(db.String(100))
     document_url = db.Column(db.String(200))
 
 class Event(db.Model):
+    __tablename__ = 'event'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100))
     description = db.Column(db.Text)
     date = db.Column(db.String(100))
 
 class ContentBlock(db.Model):
+    __tablename__ = 'content_page'
     id = db.Column(db.Integer, primary_key=True)
     section = db.Column(db.String(100))
     title = db.Column(db.String(100))
@@ -74,10 +76,10 @@ class ContentBlock(db.Model):
 def get_homepage_slides():
     try:
         slides = Slide.query.all()
-        print(f"✅ Slides found: {len(slides)}")
+        print(f"\u2705 Slides found: {len(slides)}")
         return jsonify([{"id": s.id, "title": s.title, "image_url": s.image_url} for s in slides])
     except Exception as e:
-        print("❌ Error loading slides:", e)
+        print("\u274C Error loading slides:", e)
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Failed to load slides"}), 500

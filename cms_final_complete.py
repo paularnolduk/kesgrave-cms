@@ -58,6 +58,11 @@ class Councillor(db.Model):
     name = db.Column(db.String(100))
     role = db.Column(db.String(100))
     contact = db.Column(db.String(200))
+    image_url = db.Column(db.String(255))
+    sort_order = db.Column(db.Integer)
+    is_active = db.Column(db.Boolean)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 class Meeting(db.Model):
     __tablename__ = 'meeting'
@@ -65,6 +70,10 @@ class Meeting(db.Model):
     title = db.Column(db.String(100))
     date = db.Column(db.String(100))
     document_url = db.Column(db.String(200))
+    sort_order = db.Column(db.Integer)
+    is_active = db.Column(db.Boolean)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 class Event(db.Model):
     __tablename__ = 'event'
@@ -72,6 +81,11 @@ class Event(db.Model):
     title = db.Column(db.String(100))
     description = db.Column(db.Text)
     date = db.Column(db.String(100))
+    location = db.Column(db.String(255))
+    sort_order = db.Column(db.Integer)
+    is_active = db.Column(db.Boolean)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 class ContentBlock(db.Model):
     __tablename__ = 'content_page'
@@ -79,6 +93,10 @@ class ContentBlock(db.Model):
     section = db.Column(db.String(100))
     title = db.Column(db.String(100))
     content = db.Column(db.Text)
+    sort_order = db.Column(db.Integer)
+    is_active = db.Column(db.Boolean)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 # === API Routes ===
 @app.route('/api/homepage/slides')
@@ -110,22 +128,22 @@ def get_homepage_slides():
 @app.route('/api/councillors')
 def get_councillors():
     councillors = Councillor.query.all()
-    return jsonify([{"id": c.id, "name": c.name, "role": c.role, "contact": c.contact} for c in councillors])
+    return jsonify([{ "id": c.id, "name": c.name, "role": c.role, "contact": c.contact, "image_url": c.image_url } for c in councillors])
 
 @app.route('/api/meetings')
 def get_meetings():
     meetings = Meeting.query.all()
-    return jsonify([{"id": m.id, "title": m.title, "date": m.date, "document_url": m.document_url} for m in meetings])
+    return jsonify([{ "id": m.id, "title": m.title, "date": m.date, "document_url": m.document_url } for m in meetings])
 
 @app.route('/api/events')
 def get_events():
     events = Event.query.all()
-    return jsonify([{"id": e.id, "title": e.title, "description": e.description, "date": e.date} for e in events])
+    return jsonify([{ "id": e.id, "title": e.title, "description": e.description, "date": e.date, "location": e.location } for e in events])
 
 @app.route('/api/content/<section>')
 def get_content_section(section):
     blocks = ContentBlock.query.filter_by(section=section).all()
-    return jsonify([{"id": b.id, "title": b.title, "content": b.content} for b in blocks])
+    return jsonify([{ "id": b.id, "title": b.title, "content": b.content } for b in blocks])
 
 @app.route('/api/debug/counts')
 def debug_counts():
@@ -139,7 +157,6 @@ def debug_counts():
 
 @app.route('/api/councillor-tags')
 def get_councillor_tags():
-    # Placeholder route until tag model is created
     return jsonify([])
 
 # === Admin/CMS Routes ===

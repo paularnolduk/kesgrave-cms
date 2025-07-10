@@ -130,32 +130,53 @@ def get_homepage_slides():
                 "updated_at": s.updated_at
             } for s in slides])
     except Exception as e:
+        print("❌ Error loading slides:", e)
         return jsonify({"error": "Failed to load slides"}), 500
 
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
-    links = QuickLink.query.all()
-    return jsonify([{ "id": l.id, "label": l.label, "url": l.url, "icon": l.icon } for l in links])
+    try:
+        links = QuickLink.query.all()
+        return jsonify([{ "id": l.id, "label": l.label, "url": l.url, "icon": l.icon } for l in links])
+    except Exception as e:
+        print("❌ Error loading quick links:", e)
+        return jsonify({"error": "Failed to load quick links"}), 500
 
 @app.route('/api/councillors')
 def get_councillors():
-    councillors = Councillor.query.all()
-    return jsonify([{ "id": c.id, "name": c.name, "role": c.role, "contact": c.contact, "image_url": c.image_url } for c in councillors])
+    try:
+        councillors = Councillor.query.all()
+        return jsonify([{ "id": c.id, "name": c.name, "role": c.role, "contact": c.contact, "image_url": c.image_url } for c in councillors])
+    except Exception as e:
+        print("❌ Error loading councillors:", e)
+        return jsonify({"error": "Failed to load councillors"}), 500
 
 @app.route('/api/homepage/meetings')
 def get_meetings():
-    meetings = Meeting.query.all()
-    return jsonify([{ "id": m.id, "title": m.title, "date": m.date, "document_url": m.document_url } for m in meetings])
+    try:
+        meetings = Meeting.query.all()
+        return jsonify([{ "id": m.id, "title": m.title, "date": m.date, "document_url": m.document_url } for m in meetings])
+    except Exception as e:
+        print("❌ Error loading meetings:", e)
+        return jsonify({"error": "Failed to load meetings"}), 500
 
 @app.route('/api/homepage/events')
 def get_events():
-    events = Event.query.all()
-    return jsonify([{ "id": e.id, "title": e.title, "description": e.description, "date": e.date, "location": e.location } for e in events])
+    try:
+        events = Event.query.all()
+        return jsonify([{ "id": e.id, "title": e.title, "description": e.description, "date": e.date, "location": e.location } for e in events])
+    except Exception as e:
+        print("❌ Error loading events:", e)
+        return jsonify({"error": "Failed to load events"}), 500
 
 @app.route('/api/content/<section>')
 def get_content_section(section):
-    blocks = ContentBlock.query.filter_by(section=section).all()
-    return jsonify([{ "id": b.id, "title": b.title, "content": b.content } for b in blocks])
+    try:
+        blocks = ContentBlock.query.filter_by(section=section).all()
+        return jsonify([{ "id": b.id, "title": b.title, "content": b.content } for b in blocks])
+    except Exception as e:
+        print(f"❌ Error loading content section '{section}':", e)
+        return jsonify({"error": f"Failed to load content section: {section}"}), 500
 
 @app.route('/api/debug/counts')
 def debug_counts():

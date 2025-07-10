@@ -137,46 +137,97 @@ def get_homepage_slides():
 def get_quick_links():
     try:
         links = QuickLink.query.all()
-        return jsonify([{ "id": l.id, "label": l.label, "url": l.url, "icon": l.icon } for l in links])
+        return jsonify([
+            {
+                "id": l.id,
+                "label": l.label,
+                "url": l.url,
+                "icon": l.icon,
+                "sort_order": l.sort_order,
+                "is_active": l.is_active,
+                "created_at": l.created_at,
+                "updated_at": l.updated_at,
+            } for l in links])
     except Exception as e:
-        print("❌ Error loading quick links:", e)
-        return jsonify({"error": "Failed to load quick links"}), 500
+        print("❌ Failed to load quick links:", e)
+        return jsonify({"error": f"Failed to load quick links: {str(e)}"}), 500
 
 @app.route('/api/councillors')
 def get_councillors():
     try:
         councillors = Councillor.query.all()
-        return jsonify([{ "id": c.id, "name": c.name, "role": c.role, "contact": c.contact, "image_url": c.image_url } for c in councillors])
+        return jsonify([
+            {
+                "id": c.id,
+                "name": c.name,
+                "role": c.role,
+                "contact": c.contact,
+                "image_url": c.image_url,
+                "sort_order": c.sort_order,
+                "is_active": c.is_active,
+                "created_at": c.created_at,
+                "updated_at": c.updated_at
+            } for c in councillors])
     except Exception as e:
-        print("❌ Error loading councillors:", e)
-        return jsonify({"error": "Failed to load councillors"}), 500
+        print("❌ Failed to load councillors:", e)
+        return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
 
 @app.route('/api/homepage/meetings')
 def get_meetings():
     try:
         meetings = Meeting.query.all()
-        return jsonify([{ "id": m.id, "title": m.title, "date": m.date, "document_url": m.document_url } for m in meetings])
+        return jsonify([
+            {
+                "id": m.id,
+                "title": m.title,
+                "date": m.date,
+                "document_url": m.document_url,
+                "sort_order": m.sort_order,
+                "is_active": m.is_active,
+                "created_at": m.created_at,
+                "updated_at": m.updated_at
+            } for m in meetings])
     except Exception as e:
-        print("❌ Error loading meetings:", e)
-        return jsonify({"error": "Failed to load meetings"}), 500
+        print("❌ Failed to load meetings:", e)
+        return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
 
 @app.route('/api/homepage/events')
 def get_events():
     try:
         events = Event.query.all()
-        return jsonify([{ "id": e.id, "title": e.title, "description": e.description, "date": e.date, "location": e.location } for e in events])
+        return jsonify([
+            {
+                "id": e.id,
+                "title": e.title,
+                "description": e.description,
+                "date": e.date,
+                "location": e.location,
+                "sort_order": e.sort_order,
+                "is_active": e.is_active,
+                "created_at": e.created_at,
+                "updated_at": e.updated_at
+            } for e in events])
     except Exception as e:
-        print("❌ Error loading events:", e)
-        return jsonify({"error": "Failed to load events"}), 500
+        print("❌ Failed to load events:", e)
+        return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 
 @app.route('/api/content/<section>')
 def get_content_section(section):
     try:
         blocks = ContentBlock.query.filter_by(section=section).all()
-        return jsonify([{ "id": b.id, "title": b.title, "content": b.content } for b in blocks])
+        return jsonify([
+            {
+                "id": b.id,
+                "title": b.title,
+                "content": b.content,
+                "sort_order": b.sort_order,
+                "is_active": b.is_active,
+                "created_at": b.created_at,
+                "updated_at": b.updated_at
+            } for b in blocks])
     except Exception as e:
-        print(f"❌ Error loading content section '{section}':", e)
-        return jsonify({"error": f"Failed to load content section: {section}"}), 500
+        print(f"❌ Failed to load content for section '{section}':", e)
+        return jsonify({"error": f"Failed to load content for section '{section}': {str(e)}"}), 500
 
 @app.route('/api/debug/counts')
 def debug_counts():

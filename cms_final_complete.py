@@ -25,29 +25,44 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
+# Global variables for models
+Slide = None
+QuickLink = None
+Councillor = None
+Meeting = None
+Event = None
+
+def init_models():
+    """Initialize models within application context"""
+    global Slide, QuickLink, Councillor, Meeting, Event
+    
+    if Slide is None:  # Only initialize once
+        with app.app_context():
+            Base = automap_base()
+            Base.prepare(db.engine, reflect=True)
+            
+            Slide = Base.classes.homepage_slide
+            QuickLink = Base.classes.homepage_quicklink
+            Councillor = Base.classes.councillor
+            Meeting = Base.classes.meeting
+            Event = Base.classes.event
+
+# Test database connection
 try:
-    conn = sqlite3.connect(db_path)
-    print("✅ Database connected successfully")
-    tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
-    print("📋 Tables in DB:", tables)
-    conn.close()
+    with app.app_context():
+        conn = sqlite3.connect(db_path)
+        print("✅ Database connected successfully")
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
+        print("📋 Tables in DB:", tables)
+        conn.close()
 except Exception as e:
     print("❌ Failed to connect to DB:", e)
-
-# === Reflect Models ===
-Base = automap_base()
-Base.prepare(db.engine, reflect=True)
-
-Slide = Base.classes.homepage_slide
-QuickLink = Base.classes.homepage_quicklink
-Councillor = Base.classes.councillor
-Meeting = Base.classes.meeting
-Event = Base.classes.event
 
 # === API Routes ===
 @app.route('/api/homepage/slides')
 def get_homepage_slides():
     try:
+        init_models()  # Ensure models are initialized
         slides = db.session.query(Slide).all()
         return jsonify([{
             "id": s.id,
@@ -67,6 +82,7 @@ def get_homepage_slides():
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
     try:
+        init_models()  # Ensure models are initialized
         links = db.session.query(QuickLink).all()
         return jsonify([{
             "id": l.id,
@@ -82,6 +98,7 @@ def get_quick_links():
 @app.route('/api/councillors')
 def get_councillors():
     try:
+        init_models()  # Ensure models are initialized
         councillors = db.session.query(Councillor).all()
         return jsonify([{
             "id": c.id,
@@ -96,6 +113,7 @@ def get_councillors():
 @app.route('/api/homepage/meetings')
 def get_meetings():
     try:
+        init_models()  # Ensure models are initialized
         meetings = db.session.query(Meeting).all()
         return jsonify([{
             "id": m.id,
@@ -109,6 +127,7 @@ def get_meetings():
 @app.route('/api/homepage/events')
 def get_events():
     try:
+        init_models()  # Ensure models are initialized
         events = db.session.query(Event).all()
         return jsonify([{
             "id": e.id,
@@ -149,4 +168,3 @@ def serve_frontend_paths(path):
 
 if __name__ == '__main__':
     app.run(debug=True)
-

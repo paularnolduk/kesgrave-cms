@@ -84,12 +84,14 @@ except Exception as e:
 def get_homepage_slides():
     try:
         init_models()
-        slides = db.session.query(Slide).all()
+        # FIXED: Filter for active slides and order by sort_order
+        slides = db.session.query(Slide).filter(Slide.is_active == True).order_by(Slide.sort_order).all()
         return jsonify([{
             "id": s.id,
             "title": safe_string(s.title),
             "introduction": safe_string(s.introduction),
-            "image": safe_string(s.image_filename),
+            # FIXED: Return full image URL path instead of just filename
+            "image": f"/static/uploads/{safe_string(s.image_filename)}" if s.image_filename else "",
             "button_text": safe_string(s.button_name),
             "button_url": safe_string(s.button_url),
             "open_method": safe_string(s.open_method),

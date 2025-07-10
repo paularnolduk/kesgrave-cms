@@ -45,6 +45,9 @@ def init_models():
     """Initialize database models using automap"""
     global Base, HomepageSlide, HomepageQuicklink, Meeting, MeetingType, Event, EventCategory, Councillor, Tag, CouncillorTag, ContentPage, ContentCategory
     
+    if Base is not None:
+        return  # Already initialized
+    
     with app.app_context():
         Base = automap_base()
         Base.prepare(db.engine, reflect=True)
@@ -62,25 +65,24 @@ def init_models():
         ContentPage = Base.classes.content_page
         ContentCategory = Base.classes.content_category
 
-@app.before_first_request
-def initialize_database():
-    """Initialize database models before first request"""
-    init_models()
-
-# Test database connection
-try:
-    with app.app_context():
+# Initialize models at startup
+with app.app_context():
+    try:
+        # Test database connection
         db.engine.execute(text('SELECT 1'))
-    print("✅ Database connected successfully")
-    
-    # Get table names
-    with app.app_context():
+        print("✅ Database connected successfully")
+        
+        # Get table names
         result = db.engine.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
         tables = [row[0] for row in result]
         print(f"📋 Tables in DB: {tables}")
         
-except Exception as e:
-    print(f"❌ Database connection failed: {e}")
+        # Initialize models
+        init_models()
+        print("✅ Database models initialized")
+        
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
 
 # Homepage API Routes
 

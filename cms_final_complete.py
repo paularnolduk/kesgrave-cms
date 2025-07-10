@@ -40,74 +40,63 @@ except Exception as e:
 class Slide(db.Model):
     __tablename__ = 'homepage_slide'
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200))
+    title = db.Column(db.String)
     introduction = db.Column(db.Text)
-    image_filename = db.Column(db.String(255))
-    button_name = db.Column(db.String(100))
-    button_url = db.Column(db.String(500))
-    open_method = db.Column(db.String(20))
-    is_featured = db.Column(db.Boolean, default=False)
-    sort_order = db.Column(db.Integer, default=0)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    image = db.Column(db.String)
+    button_text = db.Column(db.String)
+    button_url = db.Column(db.String)
+    open_method = db.Column(db.String)
+    is_featured = db.Column(db.Boolean)
+    sort_order = db.Column(db.Integer)
+    is_active = db.Column(db.Boolean)
+    created = db.Column(db.DateTime)
+    updated = db.Column(db.DateTime)
 
 class QuickLink(db.Model):
     __tablename__ = 'homepage_quicklink'
     id = db.Column(db.Integer, primary_key=True)
-    label = db.Column(db.String(255))
-    url = db.Column(db.String(255))
-    icon = db.Column(db.String(100))
+    name = db.Column(db.String)
+    icon = db.Column(db.String)
+    url = db.Column(db.String)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    created = db.Column(db.DateTime)
+    updated = db.Column(db.DateTime)
 
 class Councillor(db.Model):
     __tablename__ = 'councillor'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100))
-    role = db.Column(db.String(100))
-    contact = db.Column(db.String(200))
-    image_url = db.Column(db.String(255))
+    name = db.Column(db.String)
+    role = db.Column(db.String)
+    phone = db.Column(db.String)
+    email = db.Column(db.String)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    created = db.Column(db.DateTime)
+    updated = db.Column(db.DateTime)
 
 class Meeting(db.Model):
     __tablename__ = 'meeting'
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(100))
-    date = db.Column(db.String(100))
-    document_url = db.Column(db.String(200))
+    title = db.Column(db.String)
+    meeting_date = db.Column(db.String)
+    download_url = db.Column(db.String)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    created = db.Column(db.DateTime)
+    updated = db.Column(db.DateTime)
 
 class Event(db.Model):
     __tablename__ = 'event'
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(100))
+    title = db.Column(db.String)
     description = db.Column(db.Text)
-    date = db.Column(db.String(100))
-    location = db.Column(db.String(255))
+    event_date = db.Column(db.String)
+    location = db.Column(db.String)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
-
-class ContentBlock(db.Model):
-    __tablename__ = 'content_page'
-    id = db.Column(db.Integer, primary_key=True)
-    section = db.Column(db.String(100))
-    title = db.Column(db.String(100))
-    content = db.Column(db.Text)
-    sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    created = db.Column(db.DateTime)
+    updated = db.Column(db.DateTime)
 
 # === API Routes ===
 @app.route('/api/homepage/slides')
@@ -119,19 +108,16 @@ def get_homepage_slides():
                 "id": s.id,
                 "title": s.title,
                 "introduction": s.introduction,
-                "image_filename": s.image_filename,
-                "button_name": s.button_name,
+                "image": s.image,
+                "button_text": s.button_text,
                 "button_url": s.button_url,
                 "open_method": s.open_method,
                 "is_featured": s.is_featured,
                 "sort_order": s.sort_order,
-                "is_active": s.is_active,
-                "created_at": s.created_at,
-                "updated_at": s.updated_at
+                "is_active": s.is_active
             } for s in slides])
     except Exception as e:
-        print("❌ Error loading slides:", e)
-        return jsonify({"error": "Failed to load slides"}), 500
+        return jsonify({"error": f"Failed to load slides: {str(e)}"}), 500
 
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
@@ -140,16 +126,12 @@ def get_quick_links():
         return jsonify([
             {
                 "id": l.id,
-                "label": l.label,
-                "url": l.url,
+                "name": l.name,
                 "icon": l.icon,
-                "sort_order": l.sort_order,
-                "is_active": l.is_active,
-                "created_at": l.created_at,
-                "updated_at": l.updated_at,
+                "url": l.url,
+                "sort_order": l.sort_order
             } for l in links])
     except Exception as e:
-        print("❌ Failed to load quick links:", e)
         return jsonify({"error": f"Failed to load quick links: {str(e)}"}), 500
 
 @app.route('/api/councillors')
@@ -161,15 +143,10 @@ def get_councillors():
                 "id": c.id,
                 "name": c.name,
                 "role": c.role,
-                "contact": c.contact,
-                "image_url": c.image_url,
-                "sort_order": c.sort_order,
-                "is_active": c.is_active,
-                "created_at": c.created_at,
-                "updated_at": c.updated_at
+                "phone": c.phone,
+                "email": c.email
             } for c in councillors])
     except Exception as e:
-        print("❌ Failed to load councillors:", e)
         return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
 
 @app.route('/api/homepage/meetings')
@@ -180,15 +157,10 @@ def get_meetings():
             {
                 "id": m.id,
                 "title": m.title,
-                "date": m.date,
-                "document_url": m.document_url,
-                "sort_order": m.sort_order,
-                "is_active": m.is_active,
-                "created_at": m.created_at,
-                "updated_at": m.updated_at
+                "meeting_date": m.meeting_date,
+                "download_url": m.download_url
             } for m in meetings])
     except Exception as e:
-        print("❌ Failed to load meetings:", e)
         return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
 
 @app.route('/api/homepage/events')
@@ -200,47 +172,13 @@ def get_events():
                 "id": e.id,
                 "title": e.title,
                 "description": e.description,
-                "date": e.date,
-                "location": e.location,
-                "sort_order": e.sort_order,
-                "is_active": e.is_active,
-                "created_at": e.created_at,
-                "updated_at": e.updated_at
+                "event_date": e.event_date,
+                "location": e.location
             } for e in events])
     except Exception as e:
-        print("❌ Failed to load events:", e)
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 
-@app.route('/api/content/<section>')
-def get_content_section(section):
-    try:
-        blocks = ContentBlock.query.filter_by(section=section).all()
-        return jsonify([
-            {
-                "id": b.id,
-                "title": b.title,
-                "content": b.content,
-                "sort_order": b.sort_order,
-                "is_active": b.is_active,
-                "created_at": b.created_at,
-                "updated_at": b.updated_at
-            } for b in blocks])
-    except Exception as e:
-        print(f"❌ Failed to load content for section '{section}':", e)
-        return jsonify({"error": f"Failed to load content for section '{section}': {str(e)}"}), 500
-
-@app.route('/api/debug/counts')
-def debug_counts():
-    return jsonify({
-        "slides": Slide.query.count(),
-        "quick_links": QuickLink.query.count(),
-        "councillors": Councillor.query.count(),
-        "meetings": Meeting.query.count(),
-        "events": Event.query.count(),
-        "content_blocks": ContentBlock.query.count()
-    })
-
-# === Admin/CMS Routes ===
+# === Serve Static and Admin ===
 @app.route("/admin")
 def admin_root():
     return redirect("/admin/login")
@@ -253,12 +191,10 @@ def serve_admin(path):
 def login():
     return send_from_directory("dist", "index.html")
 
-# === Serve Static Assets ===
 @app.route("/assets/<path:filename>")
 def serve_assets(filename):
     return send_from_directory(os.path.join(app.static_folder), filename)
 
-# === Frontend Pages ===
 @app.route("/")
 def serve_frontend():
     return send_from_directory("dist", "index.html")

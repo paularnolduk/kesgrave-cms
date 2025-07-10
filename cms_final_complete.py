@@ -3,6 +3,7 @@ import sqlite3
 from flask import Flask, send_from_directory, jsonify, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from sqlalchemy.ext.automap import automap_base
 
 app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
@@ -33,73 +34,21 @@ try:
 except Exception as e:
     print("\u274C Failed to connect to DB:", e)
 
-# === Models ===
-class Slide(db.Model):
-    __tablename__ = 'homepage_slide'
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.Text)
-    introduction = db.Column(db.Text)
-    filename = db.Column(db.Text)  # was image
-    button_text = db.Column(db.Text)
-    button_url = db.Column(db.Text)
-    open_method = db.Column(db.Text)
-    is_featured = db.Column(db.Integer)
-    sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Integer)
-    created = db.Column(db.Text)
-    updated = db.Column(db.Text)
+# === Reflect Models ===
+Base = automap_base()
+Base.prepare(db.engine, reflect=True)
 
-class QuickLink(db.Model):
-    __tablename__ = 'homepage_quicklink'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.Text)  # was label
-    icon = db.Column(db.Text)
-    url = db.Column(db.Text)
-    sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Integer)
-    created = db.Column(db.Text)
-    updated = db.Column(db.Text)
-
-class Councillor(db.Model):
-    __tablename__ = 'councillor'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.Text)
-    role = db.Column(db.Text)
-    phone = db.Column(db.Text)
-    email = db.Column(db.Text)
-    sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Integer)
-    created = db.Column(db.Text)
-    updated = db.Column(db.Text)
-
-class Meeting(db.Model):
-    __tablename__ = 'meeting'
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.Text)
-    date = db.Column(db.Text)  # was meeting_date
-    document_url = db.Column(db.Text)
-    sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Integer)
-    created = db.Column(db.Text)
-    updated = db.Column(db.Text)
-
-class Event(db.Model):
-    __tablename__ = 'event'
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.Text)
-    description = db.Column(db.Text)
-    date = db.Column(db.Text)  # was event_date
-    location = db.Column(db.Text)
-    sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Integer)
-    created = db.Column(db.Text)
-    updated = db.Column(db.Text)
+Slide = Base.classes.homepage_slide
+QuickLink = Base.classes.homepage_quicklink
+Councillor = Base.classes.councillor
+Meeting = Base.classes.meeting
+Event = Base.classes.event
 
 # === API Routes ===
 @app.route('/api/homepage/slides')
 def get_homepage_slides():
     try:
-        slides = Slide.query.all()
+        slides = db.session.query(Slide).all()
         return jsonify([{
             "id": s.id,
             "title": s.title,
@@ -118,7 +67,7 @@ def get_homepage_slides():
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
     try:
-        links = QuickLink.query.all()
+        links = db.session.query(QuickLink).all()
         return jsonify([{
             "id": l.id,
             "label": l.name,
@@ -133,7 +82,7 @@ def get_quick_links():
 @app.route('/api/councillors')
 def get_councillors():
     try:
-        councillors = Councillor.query.all()
+        councillors = db.session.query(Councillor).all()
         return jsonify([{
             "id": c.id,
             "name": c.name,
@@ -147,11 +96,11 @@ def get_councillors():
 @app.route('/api/homepage/meetings')
 def get_meetings():
     try:
-        meetings = Meeting.query.all()
+        meetings = db.session.query(Meeting).all()
         return jsonify([{
             "id": m.id,
             "title": m.title,
-            "date": m.date,
+            "date": m.meeting_date,
             "document_url": m.document_url
         } for m in meetings])
     except Exception as e:
@@ -160,12 +109,12 @@ def get_meetings():
 @app.route('/api/homepage/events')
 def get_events():
     try:
-        events = Event.query.all()
+        events = db.session.query(Event).all()
         return jsonify([{
             "id": e.id,
             "title": e.title,
             "description": e.description,
-            "date": e.date,
+            "date": e.event_date,
             "location": e.location
         } for e in events])
     except Exception as e:

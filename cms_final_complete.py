@@ -35,10 +35,12 @@ Event = None
 ContentPage = None
 ContentCategory = None
 MeetingType = None
+EventCategory = None
+Tag = None
 
 def init_models():
     """Initialize models within application context"""
-    global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, MeetingType
+    global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, MeetingType, EventCategory, Tag
     
     if Slide is None:  # Only initialize once
         with app.app_context():
@@ -53,6 +55,8 @@ def init_models():
             ContentPage = Base.classes.content_page
             ContentCategory = Base.classes.content_category
             MeetingType = Base.classes.meeting_type
+            EventCategory = Base.classes.event_category
+            Tag = Base.classes.tag
 
 def safe_string(value):
     """Convert None/null values to empty string"""
@@ -73,7 +77,7 @@ try:
 except Exception as e:
     print("❌ Failed to connect to DB:", e)
 
-# === EXISTING API Routes ===
+# === HOMEPAGE API Routes ===
 @app.route('/api/homepage/slides')
 def get_homepage_slides():
     try:
@@ -110,21 +114,6 @@ def get_quick_links():
     except Exception as e:
         return jsonify({"error": f"Failed to load quick links: {str(e)}"}), 500
 
-@app.route('/api/councillors')
-def get_councillors():
-    try:
-        init_models()
-        councillors = db.session.query(Councillor).all()
-        return jsonify([{
-            "id": c.id,
-            "name": safe_string(c.name),
-            "role": safe_string(c.title),
-            "phone": safe_string(c.phone),
-            "email": safe_string(c.email)
-        } for c in councillors])
-    except Exception as e:
-        return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
-
 @app.route('/api/homepage/meetings')
 def get_meetings():
     try:
@@ -154,6 +143,38 @@ def get_events():
     except Exception as e:
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 
+# === COUNCILLOR API Routes ===
+@app.route('/api/councillors')
+def get_councillors():
+    try:
+        init_models()
+        councillors = db.session.query(Councillor).all()
+        return jsonify([{
+            "id": c.id,
+            "name": safe_string(c.name),
+            "role": safe_string(c.title),
+            "phone": safe_string(c.phone),
+            "email": safe_string(c.email)
+        } for c in councillors])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
+
+@app.route('/api/councillor-tags')
+def get_councillor_tags():
+    try:
+        init_models()
+        tags = db.session.query(Tag).all()
+        return jsonify([{
+            "id": t.id,
+            "name": safe_string(t.name),
+            "color": safe_string(t.color),
+            "description": safe_string(t.description),
+            "is_active": t.is_active
+        } for t in tags])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load councillor tags: {str(e)}"}), 500
+
+# === CONTENT API Routes ===
 @app.route('/api/content/pages')
 def get_content_pages():
     try:
@@ -194,6 +215,7 @@ def get_content_categories():
     except Exception as e:
         return jsonify({"error": f"Failed to load content categories: {str(e)}"}), 500
 
+# === MEETING API Routes ===
 @app.route('/api/meeting-types')
 def get_meeting_types():
     try:
@@ -211,7 +233,6 @@ def get_meeting_types():
     except Exception as e:
         return jsonify({"error": f"Failed to load meeting types: {str(e)}"}), 500
 
-# === NEW: Meetings by Type API ===
 @app.route('/api/meetings/type/<type_name>')
 def get_meetings_by_type(type_name):
     try:
@@ -250,6 +271,23 @@ def get_meetings_by_type(type_name):
         } for m in meetings])
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings for type '{type_name}': {str(e)}"}), 500
+
+# === EVENT API Routes ===
+@app.route('/api/event-categories')
+def get_event_categories():
+    try:
+        init_models()
+        categories = db.session.query(EventCategory).all()
+        return jsonify([{
+            "id": c.id,
+            "name": safe_string(c.name),
+            "description": safe_string(c.description),
+            "color": safe_string(c.color),
+            "icon": safe_string(c.icon),
+            "is_active": c.is_active
+        } for c in categories])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load event categories: {str(e)}"}), 500
 
 # === Static and Admin Routing ===
 @app.route("/admin")

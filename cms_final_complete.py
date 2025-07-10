@@ -56,3 +56,10 @@ def serve_frontend(path):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+@app.route('/routes')
+def show_routes():
+    return jsonify([
+        str(rule) for rule in app.url_map.iter_rules()
+    ])
+

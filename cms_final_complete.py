@@ -90,7 +90,7 @@ def get_homepage_slides():
             "id": s.id,
             "title": safe_string(s.title),
             "introduction": safe_string(s.introduction),
-            "image": safe_string(s.image_filename),
+            "image": f"/uploads/homepage/slides/{safe_string(s.image_filename)}" if s.image_filename else "",
             "button_text": safe_string(s.button_name),
             "button_url": safe_string(s.button_url),
             "open_method": safe_string(s.open_method),
@@ -375,13 +375,20 @@ def login():
 def serve_assets(filename):
     return send_from_directory(os.path.join(app.static_folder), filename)
 
+# NEW: Add route to serve uploaded images
+@app.route("/uploads/<path:filename>")
+def serve_uploads(filename):
+    """Serve uploaded files from the uploads directory"""
+    uploads_dir = os.path.join(basedir, "uploads")
+    return send_from_directory(uploads_dir, filename)
+
 @app.route("/")
 def serve_frontend():
     return send_from_directory("dist", "index.html")
 
 @app.route("/<path:path>")
 def serve_frontend_paths(path):
-    if path.startswith("api/") or path.startswith("admin/") or path.startswith("assets/"):
+    if path.startswith("api/") or path.startswith("admin/") or path.startswith("assets/") or path.startswith("uploads/"):
         return "Not Found", 404
     return send_from_directory("dist", "index.html")
 

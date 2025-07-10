@@ -120,13 +120,16 @@ def get_quick_links():
 def get_meetings():
     try:
         init_models()
-        meetings = db.session.query(Meeting).all()
+        # Join meetings with meeting_type to get the type name
+        meetings = db.session.query(Meeting, MeetingType).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).all()
+        
         return jsonify([{
             "id": m.id,
             "title": safe_string(m.title),
             "date": m.meeting_date,
-            "document_url": safe_string(m.agenda_filename or m.minutes_filename or m.draft_minutes_filename)
-        } for m in meetings])
+            "document_url": safe_string(m.agenda_filename or m.minutes_filename or m.draft_minutes_filename),
+            "type": safe_string(mt.name)  # Add the missing type field
+        } for m, mt in meetings])
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
 

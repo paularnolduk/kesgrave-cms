@@ -26,13 +26,18 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
-# Debug DB connection
+# Debug DB connection and list tables
 try:
     conn = sqlite3.connect(db_path)
-    print("\u2705 Database connected successfully")
+    print("✅ Database connected successfully")
+
+    tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
+    print("📋 Tables in DB:", tables)
+
     conn.close()
 except Exception as e:
-    print("\u274C Failed to connect to DB:", e)
+    print("❌ Failed to connect to or inspect DB:", e)
+
 
 # === Models ===
 class Slide(db.Model):

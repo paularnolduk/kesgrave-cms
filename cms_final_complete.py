@@ -51,6 +51,10 @@ def safe_string(value):
     """Convert None/null values to empty string"""
     return value if value is not None else ""
 
+def safe_getattr(obj, attr, default=""):
+    """Safely get attribute with default value"""
+    return getattr(obj, attr, default) if hasattr(obj, attr) else default
+
 # Test database connection
 try:
     with app.app_context():
@@ -91,7 +95,7 @@ def get_quick_links():
         return jsonify([{
             "id": l.id,
             "label": safe_string(l.title),  # FIXED: was l.name, now l.title
-            "icon": safe_string(getattr(l, 'icon', '')),  # Handle missing icon column gracefully
+            "icon": safe_string(safe_getattr(l, 'icon', '')),  # Handle missing icon column gracefully
             "url": safe_string(l.button_url),  # FIXED: was l.url, now l.button_url
             "sort_order": l.sort_order,
             "is_active": l.is_active
@@ -107,7 +111,7 @@ def get_councillors():
         return jsonify([{
             "id": c.id,
             "name": safe_string(c.name),
-            "role": safe_string(c.role),
+            "role": safe_string(c.title),  # FIXED: was c.role, now c.title
             "phone": safe_string(c.phone),
             "email": safe_string(c.email)
         } for c in councillors])
@@ -172,3 +176,4 @@ def serve_frontend_paths(path):
 
 if __name__ == '__main__':
     app.run(debug=True)
+

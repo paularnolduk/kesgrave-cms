@@ -52,7 +52,7 @@ class Slide(db.Model):
 class QuickLink(db.Model):
     __tablename__ = 'homepage_quicklink'
     id = db.Column(db.Integer, primary_key=True)
-    label = db.Column(db.Text)
+    name = db.Column(db.Text)  # change from `label`
     icon = db.Column(db.Text)
     url = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
@@ -76,7 +76,7 @@ class Meeting(db.Model):
     __tablename__ = 'meeting'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.Text)
-    meeting_date = db.Column(db.Text)
+    date = db.Column(db.Text)  # change from `meeting_date`
     document_url = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Integer)
@@ -88,7 +88,7 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.Text)
     description = db.Column(db.Text)
-    event_date = db.Column(db.Text)
+    date = db.Column(db.Text)  # change from `event_date`
     location = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Integer)

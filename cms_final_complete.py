@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from flask import Flask, jsonify, render_template, request, redirect, url_for, flash, session
+from flask import Flask, jsonify, render_template, request, redirect, url_for, flash, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
@@ -8,11 +8,18 @@ from sqlalchemy import create_engine, text
 from datetime import datetime, date, time
 import secrets
 
-app = Flask(__name__)
+# Configure Flask to serve static files from dist directory
+base_dir = os.path.dirname(os.path.abspath(__file__))
+dist_dir = os.path.join(base_dir, 'dist')
+
+app = Flask(__name__, 
+            static_folder=dist_dir,
+            static_url_path='',
+            template_folder=dist_dir)
+
 app.config['SECRET_KEY'] = secrets.token_hex(16)
 
 # Database configuration
-base_dir = os.path.dirname(os.path.abspath(__file__))
 db_path = os.path.join(base_dir, 'instance', 'kesgrave_working.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -84,6 +91,18 @@ try:
         
 except Exception as e:
     print(f"❌ Database initialization failed: {e}")
+
+# Static file serving routes
+@app.route('/assets/<path:filename>')
+def serve_assets(filename):
+    """Serve assets from dist/assets directory"""
+    return send_from_directory(os.path.join(dist_dir, 'assets'), filename)
+
+@app.route('/static/uploads/<path:filename>')
+def serve_uploads(filename):
+    """Serve uploaded files"""
+    uploads_dir = os.path.join(base_dir, 'static', 'uploads')
+    return send_from_directory(uploads_dir, filename)
 
 # Homepage API Routes
 
@@ -456,8 +475,12 @@ def get_meetings_by_type(type_name):
 def index():
     return render_template('index.html')
 
+# Catch-all route for SPA routing (but exclude API and static file routes)
 @app.route('/<path:path>')
 def catch_all(path):
+    # Don't intercept API routes or static files
+    if path.startswith('api/') or path.startswith('assets/') or path.startswith('static/'):
+        return "Not Found", 404
     return render_template('index.html')
 
 if __name__ == '__main__':

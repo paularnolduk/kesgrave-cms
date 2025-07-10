@@ -1,4 +1,5 @@
 import os
+import sqlite3
 from flask import Flask, send_from_directory, jsonify, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -11,6 +12,14 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///instance/kesgrave_working.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
+
+# Debug DB connection
+try:
+    conn = sqlite3.connect("instance/kesgrave_working.db")
+    print("\u2705 Database connected successfully")
+    conn.close()
+except Exception as e:
+    print("\u274C Failed to connect to DB:", e)
 
 # === Models ===
 class Slide(db.Model):
@@ -45,8 +54,13 @@ class ContentBlock(db.Model):
 # === API Routes ===
 @app.route('/api/homepage/slides')
 def get_homepage_slides():
-    slides = Slide.query.all()
-    return jsonify([{"id": s.id, "title": s.title, "image_url": s.image_url} for s in slides])
+    try:
+        slides = Slide.query.all()
+        print(f"Slides found: {len(slides)}")
+        return jsonify([{"id": s.id, "title": s.title, "image_url": s.image_url} for s in slides])
+    except Exception as e:
+        print("\u274C Error loading slides:", e)
+        return jsonify({"error": "Failed to load slides"}), 500
 
 @app.route('/api/councillors')
 def get_councillors():
@@ -67,6 +81,21 @@ def get_events():
 def get_content_section(section):
     blocks = ContentBlock.query.filter_by(section=section).all()
     return jsonify([{"id": b.id, "title": b.title, "content": b.content} for b in blocks])
+
+@app.route('/api/debug/counts')
+def debug_counts():
+    return jsonify({
+        "slides": Slide.query.count(),
+        "councillors": Councillor.query.count(),
+        "meetings": Meeting.query.count(),
+        "events": Event.query.count(),
+        "content_blocks": ContentBlock.query.count()
+    })
+
+@app.route('/api/councillor-tags')
+def get_councillor_tags():
+    # Placeholder route until tag model is created
+    return jsonify([])
 
 # === Admin/CMS Routes ===
 @app.route("/admin")

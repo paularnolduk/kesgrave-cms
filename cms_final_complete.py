@@ -39,7 +39,7 @@ class Slide(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.Text)
     introduction = db.Column(db.Text)
-    filename = db.Column(db.Text)  # change from `image`
+    filename = db.Column(db.Text)  # was image
     button_text = db.Column(db.Text)
     button_url = db.Column(db.Text)
     open_method = db.Column(db.Text)
@@ -52,7 +52,7 @@ class Slide(db.Model):
 class QuickLink(db.Model):
     __tablename__ = 'homepage_quicklink'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.Text)  # change from `label`
+    name = db.Column(db.Text)  # was label
     icon = db.Column(db.Text)
     url = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
@@ -76,7 +76,7 @@ class Meeting(db.Model):
     __tablename__ = 'meeting'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.Text)
-    date = db.Column(db.Text)  # change from `meeting_date`
+    date = db.Column(db.Text)  # was meeting_date
     document_url = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Integer)
@@ -88,7 +88,7 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.Text)
     description = db.Column(db.Text)
-    date = db.Column(db.Text)  # change from `event_date`
+    date = db.Column(db.Text)  # was event_date
     location = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Integer)
@@ -104,7 +104,7 @@ def get_homepage_slides():
             "id": s.id,
             "title": s.title,
             "introduction": s.introduction,
-            "image": s.image,
+            "image": s.filename,
             "button_text": s.button_text,
             "button_url": s.button_url,
             "open_method": s.open_method,
@@ -121,7 +121,7 @@ def get_quick_links():
         links = QuickLink.query.all()
         return jsonify([{
             "id": l.id,
-            "label": l.label,
+            "label": l.name,
             "icon": l.icon,
             "url": l.url,
             "sort_order": l.sort_order,
@@ -151,7 +151,7 @@ def get_meetings():
         return jsonify([{
             "id": m.id,
             "title": m.title,
-            "date": m.meeting_date,
+            "date": m.date,
             "document_url": m.document_url
         } for m in meetings])
     except Exception as e:
@@ -165,7 +165,7 @@ def get_events():
             "id": e.id,
             "title": e.title,
             "description": e.description,
-            "date": e.event_date,
+            "date": e.date,
             "location": e.location
         } for e in events])
     except Exception as e:

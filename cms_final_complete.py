@@ -37,10 +37,11 @@ ContentCategory = None
 MeetingType = None
 EventCategory = None
 Tag = None
+CouncillorTag = None
 
 def init_models():
     """Initialize models within application context"""
-    global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, MeetingType, EventCategory, Tag
+    global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, MeetingType, EventCategory, Tag, CouncillorTag
     
     if Slide is None:  # Only initialize once
         with app.app_context():
@@ -57,6 +58,7 @@ def init_models():
             MeetingType = Base.classes.meeting_type
             EventCategory = Base.classes.event_category
             Tag = Base.classes.tag
+            CouncillorTag = Base.classes.councillor_tag
 
 def safe_string(value):
     """Convert None/null values to empty string"""
@@ -158,6 +160,36 @@ def get_councillors():
         } for c in councillors])
     except Exception as e:
         return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
+
+@app.route('/api/councillors/<int:councillor_id>')
+def get_councillor_detail(councillor_id):
+    try:
+        init_models()
+        councillor = db.session.query(Councillor).filter(Councillor.id == councillor_id).first()
+        
+        if not councillor:
+            return jsonify({"error": "Councillor not found"}), 404
+        
+        # Get councillor tags
+        councillor_tags = db.session.query(Tag).join(CouncillorTag, Tag.id == CouncillorTag.tag_id).filter(CouncillorTag.councillor_id == councillor_id).all()
+        
+        return jsonify({
+            "id": councillor.id,
+            "name": safe_string(councillor.name),
+            "role": safe_string(councillor.title),
+            "phone": safe_string(councillor.phone),
+            "email": safe_string(councillor.email),
+            "bio": safe_string(safe_getattr(councillor, 'bio', '')),
+            "image": safe_string(safe_getattr(councillor, 'image', '')),
+            "tags": [{
+                "id": tag.id,
+                "name": safe_string(tag.name),
+                "color": safe_string(tag.color),
+                "description": safe_string(tag.description)
+            } for tag in councillor_tags]
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to load councillor details: {str(e)}"}), 500
 
 @app.route('/api/councillor-tags')
 def get_councillor_tags():
@@ -288,6 +320,39 @@ def get_event_categories():
         } for c in categories])
     except Exception as e:
         return jsonify({"error": f"Failed to load event categories: {str(e)}"}), 500
+
+@app.route('/api/events/<int:event_id>')
+def get_event_detail(event_id):
+    try:
+        init_models()
+        event = db.session.query(Event).filter(Event.id == event_id).first()
+        
+        if not event:
+            return jsonify({"error": "Event not found"}), 404
+        
+        return jsonify({
+            "id": event.id,
+            "title": safe_string(event.title),
+            "description": safe_string(event.description),
+            "long_description": safe_string(safe_getattr(event, 'long_description', '')),
+            "start_date": event.start_date,
+            "end_date": safe_getattr(event, 'end_date', None),
+            "start_time": safe_string(str(event.start_time)) if safe_getattr(event, 'start_time', None) else "",
+            "end_time": safe_string(str(safe_getattr(event, 'end_time', ''))) if safe_getattr(event, 'end_time', None) else "",
+            "location_name": safe_string(event.location_name),
+            "location_address": safe_string(safe_getattr(event, 'location_address', '')),
+            "contact_email": safe_string(safe_getattr(event, 'contact_email', '')),
+            "contact_phone": safe_string(safe_getattr(event, 'contact_phone', '')),
+            "website_url": safe_string(safe_getattr(event, 'website_url', '')),
+            "booking_url": safe_string(safe_getattr(event, 'booking_url', '')),
+            "price": safe_string(safe_getattr(event, 'price', '')),
+            "capacity": safe_getattr(event, 'capacity', None),
+            "is_featured": safe_getattr(event, 'is_featured', False),
+            "status": safe_string(safe_getattr(event, 'status', '')),
+            "image": safe_string(safe_getattr(event, 'image', ''))
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to load event details: {str(e)}"}), 500
 
 # === Static and Admin Routing ===
 @app.route("/admin")

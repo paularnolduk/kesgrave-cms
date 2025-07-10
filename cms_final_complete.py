@@ -475,12 +475,19 @@ def get_meetings_by_type(type_name):
 def index():
     return render_template('index.html')
 
-# Catch-all route for SPA routing (but exclude API and static file routes)
+# Smart catch-all route for SPA routing
 @app.route('/<path:path>')
 def catch_all(path):
-    # Don't intercept API routes or static files
-    if path.startswith('api/') or path.startswith('assets/') or path.startswith('static/'):
+    """
+    Handle SPA routing while avoiding conflicts with static files
+    """
+    # Check if this looks like a file request (has file extension)
+    if '.' in path.split('/')[-1]:
+        # This looks like a file request, let Flask handle it normally
+        # If file doesn't exist, Flask will return 404
         return "Not Found", 404
+    
+    # This looks like a page route, serve the SPA
     return render_template('index.html')
 
 if __name__ == '__main__':

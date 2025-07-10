@@ -48,41 +48,42 @@ def init_models():
     if Base is not None:
         return  # Already initialized
     
-    with app.app_context():
-        Base = automap_base()
-        Base.prepare(db.engine, reflect=True)
-        
-        # Map tables to classes
-        HomepageSlide = Base.classes.homepage_slide
-        HomepageQuicklink = Base.classes.homepage_quicklink
-        Meeting = Base.classes.meeting
-        MeetingType = Base.classes.meeting_type
-        Event = Base.classes.event
-        EventCategory = Base.classes.event_category
-        Councillor = Base.classes.councillor
-        Tag = Base.classes.tag
-        CouncillorTag = Base.classes.councillor_tag
-        ContentPage = Base.classes.content_page
-        ContentCategory = Base.classes.content_category
+    Base = automap_base()
+    Base.prepare(db.engine, reflect=True)
+    
+    # Map tables to classes
+    HomepageSlide = Base.classes.homepage_slide
+    HomepageQuicklink = Base.classes.homepage_quicklink
+    Meeting = Base.classes.meeting
+    MeetingType = Base.classes.meeting_type
+    Event = Base.classes.event
+    EventCategory = Base.classes.event_category
+    Councillor = Base.classes.councillor
+    Tag = Base.classes.tag
+    CouncillorTag = Base.classes.councillor_tag
+    ContentPage = Base.classes.content_page
+    ContentCategory = Base.classes.content_category
 
 # Initialize models at startup
-with app.app_context():
-    try:
-        # Test database connection
-        db.engine.execute(text('SELECT 1'))
+try:
+    with app.app_context():
+        # Test database connection using modern SQLAlchemy syntax
+        with db.engine.connect() as connection:
+            connection.execute(text('SELECT 1'))
         print("✅ Database connected successfully")
         
-        # Get table names
-        result = db.engine.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-        tables = [row[0] for row in result]
+        # Get table names using modern syntax
+        with db.engine.connect() as connection:
+            result = connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+            tables = [row[0] for row in result]
         print(f"📋 Tables in DB: {tables}")
         
         # Initialize models
         init_models()
         print("✅ Database models initialized")
         
-    except Exception as e:
-        print(f"❌ Database initialization failed: {e}")
+except Exception as e:
+    print(f"❌ Database initialization failed: {e}")
 
 # Homepage API Routes
 

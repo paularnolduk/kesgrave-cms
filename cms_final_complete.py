@@ -8,7 +8,8 @@ app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
 
 # Use the correct SQLite DB in the instance folder
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///instance/kesgrave_working.db"
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(basedir, 'instance', 'kesgrave_working.db')}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)

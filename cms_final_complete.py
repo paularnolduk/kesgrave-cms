@@ -5,6 +5,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from sqlalchemy.ext.automap import automap_base
 from urllib.parse import unquote
+from sqlalchemy import text
+from datetime import datetime
 
 app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
@@ -43,41 +45,29 @@ def init_models():
     """Initialize models within application context"""
     global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, MeetingType, EventCategory, Tag, CouncillorTag
     
-    if Slide is None:  # Only initialize once
-        with app.app_context():
-            Base = automap_base()
-            Base.prepare(db.engine, reflect=True)
-            
-            Slide = Base.classes.homepage_slide
-            QuickLink = Base.classes.homepage_quicklink
-            Councillor = Base.classes.councillor
-            Meeting = Base.classes.meeting
-            Event = Base.classes.event
-            ContentPage = Base.classes.content_page
-            ContentCategory = Base.classes.content_category
-            MeetingType = Base.classes.meeting_type
-            EventCategory = Base.classes.event_category
-            Tag = Base.classes.tag
-            CouncillorTag = Base.classes.councillor_tag
+    if Slide is not None:
+        return
+    
+    Base = automap_base()
+    Base.prepare(db.engine, reflect=True)
+    
+    Slide = Base.classes.homepage_slide
+    QuickLink = Base.classes.quick_link
+    Councillor = Base.classes.councillor
+    Meeting = Base.classes.meeting
+    Event = Base.classes.event
+    ContentPage = Base.classes.content_page
+    ContentCategory = Base.classes.content_category
+    MeetingType = Base.classes.meeting_type
+    EventCategory = Base.classes.event_category
+    Tag = Base.classes.tag
+    CouncillorTag = Base.classes.councillor_tag
 
 def safe_string(value):
-    """Convert None/null values to empty string"""
-    return value if value is not None else ""
-
-def safe_getattr(obj, attr, default=""):
-    """Safely get attribute with default value"""
-    return getattr(obj, attr, default) if hasattr(obj, attr) else default
-
-# Test database connection
-try:
-    with app.app_context():
-        conn = sqlite3.connect(db_path)
-        print("✅ Database connected successfully")
-        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
-        print("📋 Tables in DB:", tables)
-        conn.close()
-except Exception as e:
-    print("❌ Failed to connect to DB:", e)
+    """Safely convert value to string, handling None values"""
+    if value is None:
+        return ""
+    return str(value)
 
 # === HOMEPAGE API Routes ===
 @app.route('/api/homepage/slides')
@@ -90,9 +80,8 @@ def get_homepage_slides():
             "id": s.id,
             "title": safe_string(s.title),
             "introduction": safe_string(s.introduction),
-            # FIXED: Return full image URL path instead of just filename
-            "image": f"/static/uploads/{safe_string(s.image_filename)}" if s.image_filename else "",
-            "button_text": safe_string(s.button_name),
+            "image": safe_string(s.image_filename),  # FIXED: Just filename, not full path
+            "button_text": safe_string(s.button_name),  # FIXED: Use button_name field
             "button_url": safe_string(s.button_url),
             "open_method": safe_string(s.open_method),
             "is_featured": s.is_featured,
@@ -100,43 +89,46 @@ def get_homepage_slides():
             "is_active": s.is_active
         } for s in slides])
     except Exception as e:
-        return jsonify({"error": f"Failed to load slides: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load slides: {e}"}), 500
 
 @app.route('/api/homepage/quick-links')
-def get_quick_links():
+def get_homepage_quick_links():
     try:
         init_models()
-        links = db.session.query(QuickLink).all()
+        quick_links = db.session.query(QuickLink).all()
         return jsonify([{
-            "id": l.id,
-            "label": safe_string(l.title),
-            "icon": safe_string(safe_getattr(l, 'icon', '')),
-            "url": safe_string(l.button_url),
-            "sort_order": l.sort_order,
-            "is_active": l.is_active
-        } for l in links])
+            "id": ql.id,
+            "title": safe_string(ql.title),
+            "description": safe_string(ql.description),
+            "button_text": safe_string(ql.button_text),
+            "button_url": safe_string(ql.button_url),
+            "open_method": safe_string(ql.open_method),
+            "sort_order": ql.sort_order,
+            "is_active": ql.is_active
+        } for ql in quick_links])
     except Exception as e:
-        return jsonify({"error": f"Failed to load quick links: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load quick links: {e}"}), 500
 
 @app.route('/api/homepage/meetings')
-def get_meetings():
+def get_homepage_meetings():
     try:
         init_models()
-        # Join meetings with meeting_type to get the type name
-        meetings = db.session.query(Meeting, MeetingType).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).all()
-        
+        meetings = db.session.query(Meeting).all()
         return jsonify([{
             "id": m.id,
             "title": safe_string(m.title),
-            "date": m.meeting_date,
-            "document_url": safe_string(m.agenda_filename or m.minutes_filename or m.draft_minutes_filename),
-            "type": safe_string(mt.name)  # Add the missing type field
-        } for m, mt in meetings])
+            "date": m.date.isoformat() if m.date else None,
+            "document_url": safe_string(m.document_url),
+            "sort_order": m.sort_order,
+            "is_active": m.is_active,
+            "created": m.created,
+            "updated": m.updated
+        } for m in meetings])
     except Exception as e:
-        return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load meetings: {e}"}), 500
 
 @app.route('/api/homepage/events')
-def get_events():
+def get_homepage_events():
     try:
         init_models()
         events = db.session.query(Event).all()
@@ -144,13 +136,25 @@ def get_events():
             "id": e.id,
             "title": safe_string(e.title),
             "description": safe_string(e.description),
-            "date": e.start_date,
-            "location": safe_string(e.location_name)
+            "start_date": e.start_date.isoformat() if e.start_date else None,
+            "end_date": e.end_date.isoformat() if e.end_date else None,
+            "start_time": safe_string(e.start_time),
+            "end_time": safe_string(e.end_time),
+            "location_name": safe_string(e.location_name),
+            "location_address": safe_string(e.location_address),
+            "location_postcode": safe_string(e.location_postcode),
+            "contact_name": safe_string(e.contact_name),
+            "contact_email": safe_string(e.contact_email),
+            "contact_phone": safe_string(e.contact_phone),
+            "booking_link": safe_string(e.booking_link),
+            "is_active": e.is_active,
+            "created": e.created,
+            "updated": e.updated
         } for e in events])
     except Exception as e:
-        return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load events: {e}"}), 500
 
-# === COUNCILLOR API Routes ===
+# === COUNCILLORS API Routes ===
 @app.route('/api/councillors')
 def get_councillors():
     try:
@@ -159,81 +163,138 @@ def get_councillors():
         return jsonify([{
             "id": c.id,
             "name": safe_string(c.name),
-            "role": safe_string(c.title),
+            "title": safe_string(c.title),
+            "bio": safe_string(c.bio),
+            "email": safe_string(c.email),
             "phone": safe_string(c.phone),
-            "email": safe_string(c.email)
+            "image_filename": safe_string(c.image_filename),
+            "is_active": c.is_active,
+            "sort_order": c.sort_order,
+            "created": c.created,
+            "updated": c.updated
         } for c in councillors])
     except Exception as e:
-        return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load councillors: {e}"}), 500
 
 @app.route('/api/councillors/<int:councillor_id>')
-def get_councillor_detail(councillor_id):
+def get_councillor(councillor_id):
     try:
         init_models()
         councillor = db.session.query(Councillor).filter(Councillor.id == councillor_id).first()
-        
         if not councillor:
             return jsonify({"error": "Councillor not found"}), 404
-        
-        # Get councillor tags
-        councillor_tags = db.session.query(Tag).join(CouncillorTag, Tag.id == CouncillorTag.tag_id).filter(CouncillorTag.councillor_id == councillor_id).all()
         
         return jsonify({
             "id": councillor.id,
             "name": safe_string(councillor.name),
-            "role": safe_string(councillor.title),
-            "phone": safe_string(councillor.phone),
+            "title": safe_string(councillor.title),
+            "bio": safe_string(councillor.bio),
             "email": safe_string(councillor.email),
-            "bio": safe_string(safe_getattr(councillor, 'bio', '')),
-            "image": safe_string(safe_getattr(councillor, 'image', '')),
-            "tags": [{
-                "id": tag.id,
-                "name": safe_string(tag.name),
-                "color": safe_string(tag.color),
-                "description": safe_string(tag.description)
-            } for tag in councillor_tags]
+            "phone": safe_string(councillor.phone),
+            "image_filename": safe_string(councillor.image_filename),
+            "is_active": councillor.is_active,
+            "sort_order": councillor.sort_order,
+            "created": councillor.created,
+            "updated": councillor.updated
         })
     except Exception as e:
-        return jsonify({"error": f"Failed to load councillor details: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load councillor: {e}"}), 500
 
-@app.route('/api/councillor-tags')
-def get_councillor_tags():
+# === EVENTS API Routes ===
+@app.route('/api/events')
+def get_events():
     try:
         init_models()
-        tags = db.session.query(Tag).all()
+        events = db.session.query(Event).all()
         return jsonify([{
-            "id": t.id,
-            "name": safe_string(t.name),
-            "color": safe_string(t.color),
-            "description": safe_string(t.description),
-            "is_active": t.is_active
-        } for t in tags])
+            "id": e.id,
+            "title": safe_string(e.title),
+            "description": safe_string(e.description),
+            "start_date": e.start_date.isoformat() if e.start_date else None,
+            "end_date": e.end_date.isoformat() if e.end_date else None,
+            "start_time": safe_string(e.start_time),
+            "end_time": safe_string(e.end_time),
+            "location_name": safe_string(e.location_name),
+            "location_address": safe_string(e.location_address),
+            "location_postcode": safe_string(e.location_postcode),
+            "contact_name": safe_string(e.contact_name),
+            "contact_email": safe_string(e.contact_email),
+            "contact_phone": safe_string(e.contact_phone),
+            "booking_link": safe_string(e.booking_link),
+            "is_active": e.is_active,
+            "created": e.created,
+            "updated": e.updated
+        } for e in events])
     except Exception as e:
-        return jsonify({"error": f"Failed to load councillor tags: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load events: {e}"}), 500
+
+@app.route('/api/events/<int:event_id>')
+def get_event(event_id):
+    try:
+        init_models()
+        event = db.session.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            return jsonify({"error": "Event not found"}), 404
+        
+        return jsonify({
+            "id": event.id,
+            "title": safe_string(event.title),
+            "description": safe_string(event.description),
+            "start_date": event.start_date.isoformat() if event.start_date else None,
+            "end_date": event.end_date.isoformat() if event.end_date else None,
+            "start_time": safe_string(event.start_time),
+            "end_time": safe_string(event.end_time),
+            "location_name": safe_string(event.location_name),
+            "location_address": safe_string(event.location_address),
+            "location_postcode": safe_string(event.location_postcode),
+            "contact_name": safe_string(event.contact_name),
+            "contact_email": safe_string(event.contact_email),
+            "contact_phone": safe_string(event.contact_phone),
+            "booking_link": safe_string(event.booking_link),
+            "is_active": event.is_active,
+            "created": event.created,
+            "updated": event.updated
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to load event: {e}"}), 500
+
+# === MEETINGS API Routes ===
+@app.route('/api/meetings')
+def get_meetings():
+    try:
+        init_models()
+        meetings = db.session.query(Meeting).all()
+        return jsonify([{
+            "id": m.id,
+            "title": safe_string(m.title),
+            "date": m.date.isoformat() if m.date else None,
+            "document_url": safe_string(m.document_url),
+            "sort_order": m.sort_order,
+            "is_active": m.is_active,
+            "created": m.created,
+            "updated": m.updated
+        } for m in meetings])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load meetings: {e}"}), 500
 
 # === CONTENT API Routes ===
-@app.route('/api/content/pages')
-def get_content_pages():
+@app.route('/api/content')
+def get_content():
     try:
         init_models()
         pages = db.session.query(ContentPage).all()
         return jsonify([{
             "id": p.id,
             "title": safe_string(p.title),
-            "slug": safe_string(p.slug),
-            "short_description": safe_string(p.short_description),
-            "long_description": safe_string(p.long_description),
+            "content": safe_string(p.content),
             "category_id": p.category_id,
-            "subcategory_id": p.subcategory_id,
-            "status": safe_string(p.status),
-            "is_featured": p.is_featured,
-            "creation_date": p.creation_date,
-            "approval_date": p.approval_date,
-            "last_reviewed": p.last_reviewed,
-            "next_review_date": p.next_review_date
+            "slug": safe_string(p.slug),
+            "is_active": p.is_active,
+            "created": p.created,
+            "updated": p.updated
         } for p in pages])
     except Exception as e:
-        return jsonify({"error": f"Failed to load content pages: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load content: {e}"}), 500
 
 @app.route('/api/content/categories')
 def get_content_categories():
@@ -243,131 +304,51 @@ def get_content_categories():
         return jsonify([{
             "id": c.id,
             "name": safe_string(c.name),
+            "slug": safe_string(c.slug),
             "description": safe_string(c.description),
-            "color": safe_string(c.color),
             "is_active": c.is_active,
-            "is_predefined": c.is_predefined,
-            "url_path": safe_string(c.url_path)
+            "sort_order": c.sort_order,
+            "created": c.created,
+            "updated": c.updated
         } for c in categories])
     except Exception as e:
-        return jsonify({"error": f"Failed to load content categories: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load categories: {e}"}), 500
 
-# === MEETING API Routes ===
-@app.route('/api/meeting-types')
-def get_meeting_types():
+@app.route('/api/content/<category_slug>/<page_slug>')
+def get_content_page(category_slug, page_slug):
     try:
         init_models()
-        meeting_types = db.session.query(MeetingType).all()
-        return jsonify([{
-            "id": mt.id,
-            "name": safe_string(mt.name),
-            "description": safe_string(mt.description),
-            "color": safe_string(mt.color),
-            "is_predefined": mt.is_predefined,
-            "is_active": mt.is_active,
-            "show_schedule_applications": mt.show_schedule_applications
-        } for mt in meeting_types])
-    except Exception as e:
-        return jsonify({"error": f"Failed to load meeting types: {str(e)}"}), 500
-
-@app.route('/api/meetings/type/<type_name>')
-def get_meetings_by_type(type_name):
-    try:
-        init_models()
-        # URL decode the type name
-        decoded_type_name = unquote(type_name)
         
-        # Join meetings with meeting_type to filter by type name
-        meetings = db.session.query(Meeting).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).filter(MeetingType.name == decoded_type_name).all()
+        # First get the category
+        category = db.session.query(ContentCategory).filter(ContentCategory.slug == category_slug).first()
+        if not category:
+            return jsonify({"error": "Category not found"}), 404
         
-        return jsonify([{
-            "id": m.id,
-            "title": safe_string(m.title),
-            "date": m.meeting_date,
-            "time": safe_string(str(m.meeting_time)) if m.meeting_time else "",
-            "location": safe_string(m.location),
-            "agenda_filename": safe_string(m.agenda_filename),
-            "minutes_filename": safe_string(m.minutes_filename),
-            "draft_minutes_filename": safe_string(m.draft_minutes_filename),
-            "schedule_applications_filename": safe_string(m.schedule_applications_filename),
-            "audio_filename": safe_string(m.audio_filename),
-            "status": safe_string(m.status),
-            "is_published": m.is_published,
-            "notes": safe_string(m.notes),
-            "agenda_title": safe_string(m.agenda_title),
-            "agenda_description": safe_string(m.agenda_description),
-            "minutes_title": safe_string(m.minutes_title),
-            "minutes_description": safe_string(m.minutes_description),
-            "draft_minutes_title": safe_string(m.draft_minutes_title),
-            "draft_minutes_description": safe_string(m.draft_minutes_description),
-            "schedule_applications_title": safe_string(m.schedule_applications_title),
-            "schedule_applications_description": safe_string(m.schedule_applications_description),
-            "audio_title": safe_string(m.audio_title),
-            "audio_description": safe_string(m.audio_description),
-            "summary_url": safe_string(m.summary_url)
-        } for m in meetings])
-    except Exception as e:
-        return jsonify({"error": f"Failed to load meetings for type '{type_name}': {str(e)}"}), 500
-
-# === EVENT API Routes ===
-@app.route('/api/event-categories')
-def get_event_categories():
-    try:
-        init_models()
-        categories = db.session.query(EventCategory).all()
-        return jsonify([{
-            "id": c.id,
-            "name": safe_string(c.name),
-            "description": safe_string(c.description),
-            "color": safe_string(c.color),
-            "icon": safe_string(c.icon),
-            "is_active": c.is_active
-        } for c in categories])
-    except Exception as e:
-        return jsonify({"error": f"Failed to load event categories: {str(e)}"}), 500
-
-@app.route('/api/events/<int:event_id>')
-def get_event_detail(event_id):
-    try:
-        init_models()
-        event = db.session.query(Event).filter(Event.id == event_id).first()
+        # Then get the page
+        page = db.session.query(ContentPage).filter(
+            ContentPage.category_id == category.id,
+            ContentPage.slug == page_slug
+        ).first()
         
-        if not event:
-            return jsonify({"error": "Event not found"}), 404
+        if not page:
+            return jsonify({"error": "Page not found"}), 404
         
         return jsonify({
-            "id": event.id,
-            "title": safe_string(event.title),
-            "description": safe_string(event.description),
-            "long_description": safe_string(safe_getattr(event, 'long_description', '')),
-            "start_date": event.start_date,
-            "end_date": safe_getattr(event, 'end_date', None),
-            "start_time": safe_string(str(event.start_time)) if safe_getattr(event, 'start_time', None) else "",
-            "end_time": safe_string(str(safe_getattr(event, 'end_time', ''))) if safe_getattr(event, 'end_time', None) else "",
-            "location_name": safe_string(event.location_name),
-            "location_address": safe_string(safe_getattr(event, 'location_address', '')),
-            "contact_email": safe_string(safe_getattr(event, 'contact_email', '')),
-            "contact_phone": safe_string(safe_getattr(event, 'contact_phone', '')),
-            "website_url": safe_string(safe_getattr(event, 'website_url', '')),
-            "booking_url": safe_string(safe_getattr(event, 'booking_url', '')),
-            "price": safe_string(safe_getattr(event, 'price', '')),
-            "capacity": safe_getattr(event, 'capacity', None),
-            "is_featured": safe_getattr(event, 'is_featured', False),
-            "status": safe_string(safe_getattr(event, 'status', '')),
-            "image": safe_string(safe_getattr(event, 'image', ''))
+            "id": page.id,
+            "title": safe_string(page.title),
+            "content": safe_string(page.content),
+            "category_id": page.category_id,
+            "category_name": safe_string(category.name),
+            "category_slug": safe_string(category.slug),
+            "slug": safe_string(page.slug),
+            "is_active": page.is_active,
+            "created": page.created,
+            "updated": page.updated
         })
     except Exception as e:
-        return jsonify({"error": f"Failed to load event details: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load page: {e}"}), 500
 
-# === Static and Admin Routing ===
-@app.route("/admin")
-def admin_root():
-    return redirect("/admin/login")
-
-@app.route("/admin/<path:path>")
-def serve_admin(path):
-    return send_from_directory("dist", "index.html")
-
+# === Frontend Serving ===
 @app.route("/login")
 def login():
     return send_from_directory("dist", "index.html")

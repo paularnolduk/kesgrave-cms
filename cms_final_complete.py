@@ -1,278 +1,235 @@
 import os
 import sqlite3
-from flask import Flask, jsonify, render_template, request, redirect, url_for, flash, session, send_from_directory
+from flask import Flask, send_from_directory, jsonify, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 from sqlalchemy.ext.automap import automap_base
-from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, text
-from datetime import datetime, date, time
-import secrets
+from urllib.parse import unquote
+from sqlalchemy import text
+from datetime import datetime
 
-# Configure Flask to serve static files from dist directory
-base_dir = os.path.dirname(os.path.abspath(__file__))
-dist_dir = os.path.join(base_dir, 'dist')
+app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
+CORS(app)
 
-app = Flask(__name__, 
-            static_folder=dist_dir,
-            static_url_path='',
-            template_folder=dist_dir)
+basedir = os.path.abspath(os.path.dirname(__file__))
 
-app.config['SECRET_KEY'] = secrets.token_hex(16)
+if os.environ.get("RENDER"):
+    tmp_db_path = "/tmp/kesgrave_working.db"
+    original_path = os.path.join(basedir, "instance", "kesgrave_working.db")
+    if not os.path.exists(tmp_db_path):
+        import shutil
+        shutil.copyfile(original_path, tmp_db_path)
+    db_path = tmp_db_path
+else:
+    db_path = os.path.join(basedir, "instance", "kesgrave_working.db")
 
-# Database configuration
-db_path = os.path.join(base_dir, 'instance', 'kesgrave_working.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
 # Global variables for models
-Base = None
-HomepageSlide = None
-HomepageQuicklink = None
-Meeting = None
-MeetingType = None
-Event = None
-EventCategory = None
+Slide = None
+QuickLink = None
 Councillor = None
-Tag = None
-CouncillorTag = None
+Meeting = None
+Event = None
 ContentPage = None
 ContentCategory = None
+MeetingType = None
+EventCategory = None
+Tag = None
+CouncillorTag = None
+
+def init_models():
+    """Initialize models within application context"""
+    global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, MeetingType, EventCategory, Tag, CouncillorTag
+    
+    if Slide is None:  # Only initialize once
+        with app.app_context():
+            Base = automap_base()
+            Base.prepare(db.engine, reflect=True)
+            
+            Slide = Base.classes.homepage_slide
+            QuickLink = Base.classes.homepage_quicklink
+            Councillor = Base.classes.councillor
+            Meeting = Base.classes.meeting
+            Event = Base.classes.event
+            ContentPage = Base.classes.content_page
+            ContentCategory = Base.classes.content_category
+            MeetingType = Base.classes.meeting_type
+            EventCategory = Base.classes.event_category
+            Tag = Base.classes.tag
+            CouncillorTag = Base.classes.councillor_tag
+
+# Initialize models at startup
+with app.app_context():
+    try:
+        # Test database connection
+        with db.engine.connect() as connection:
+            connection.execute(text('SELECT 1'))
+        print("✅ Database connected successfully")
+        
+        # Initialize models
+        init_models()
+        print("✅ Database models initialized")
+        
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
 
 def safe_string(value):
-    """Convert None values to empty strings"""
     return value if value is not None else ""
 
 def safe_getattr(obj, attr, default=""):
     """Safely get attribute with default value"""
     return getattr(obj, attr, default) if hasattr(obj, attr) else default
 
-def init_models():
-    """Initialize database models using automap"""
-    global Base, HomepageSlide, HomepageQuicklink, Meeting, MeetingType, Event, EventCategory, Councillor, Tag, CouncillorTag, ContentPage, ContentCategory
-    
-    if Base is not None:
-        return  # Already initialized
-    
-    Base = automap_base()
-    Base.prepare(db.engine, reflect=True)
-    
-    # Map tables to classes
-    HomepageSlide = Base.classes.homepage_slide
-    HomepageQuicklink = Base.classes.homepage_quicklink
-    Meeting = Base.classes.meeting
-    MeetingType = Base.classes.meeting_type
-    Event = Base.classes.event
-    EventCategory = Base.classes.event_category
-    Councillor = Base.classes.councillor
-    Tag = Base.classes.tag
-    CouncillorTag = Base.classes.councillor_tag
-    ContentPage = Base.classes.content_page
-    ContentCategory = Base.classes.content_category
-
-# Initialize models at startup
-try:
-    with app.app_context():
-        # Test database connection using modern SQLAlchemy syntax
-        with db.engine.connect() as connection:
-            connection.execute(text('SELECT 1'))
-        print("✅ Database connected successfully")
-        
-        # Get table names using modern syntax
-        with db.engine.connect() as connection:
-            result = connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            tables = [row[0] for row in result]
-        print(f"📋 Tables in DB: {tables}")
-        
-        # Initialize models
-        init_models()
-        print("✅ Database models initialized")
-        
-except Exception as e:
-    print(f"❌ Database initialization failed: {e}")
-
-# Static file serving routes
-@app.route('/assets/<path:filename>')
-def serve_assets(filename):
-    """Serve assets from dist/assets directory"""
-    return send_from_directory(os.path.join(dist_dir, 'assets'), filename)
-
-@app.route('/static/uploads/<path:filename>')
-def serve_uploads(filename):
-    """Serve uploaded files"""
-    uploads_dir = os.path.join(base_dir, 'static', 'uploads')
-    return send_from_directory(uploads_dir, filename)
-
-# Homepage API Routes
-
-@app.route('/api/homepage/slides')
-def get_slides():
-    """Get homepage slides with full image URLs"""
+# === API Routes ===
+@app.route("/api/homepage/slides")
+def get_homepage_slides():
+    init_models()
     try:
-        if not HomepageSlide:
-            init_models()
-        
-        slides = db.session.query(HomepageSlide).filter_by(is_active=True).order_by(HomepageSlide.sort_order).all()
-        
-        return jsonify([{
-            "id": s.id,
-            "title": safe_string(s.title),
-            "introduction": safe_string(s.introduction),
-            "image": f"/static/uploads/{safe_string(s.image_filename)}" if s.image_filename else "",  # Full image URL
-            "button_text": safe_string(s.button_name),  # Fixed field name
-            "button_url": safe_string(s.button_url),
-            "open_method": safe_string(s.open_method),
-            "is_featured": bool(s.is_featured),
-            "sort_order": s.sort_order,
-            "is_active": bool(s.is_active)
-        } for s in slides])
-        
-    except Exception as e:
-        return jsonify({"error": f"Failed to load slides: {str(e)}"}), 500
-
-@app.route('/api/homepage/events')
-def get_homepage_events():
-    """Get next 6 upcoming events with images and categories"""
-    try:
-        if not Event or not EventCategory:
-            init_models()
-        
-        # Get current datetime
-        now = datetime.now()
-        
-        # Query events with categories, filter future events, limit to 6, order by date
-        events = db.session.query(Event, EventCategory).join(
-            EventCategory, Event.category_id == EventCategory.id
-        ).filter(
-            Event.start_date >= now,
-            Event.is_published == True
-        ).order_by(Event.start_date.asc()).limit(6).all()
-        
-        return jsonify([{
-            "id": e.id,
-            "title": safe_string(e.title),
-            "description": safe_string(e.description or e.short_description),
-            "date": e.start_date.isoformat() if e.start_date else "",
-            "location": safe_string(e.location_name),
-            "image": f"/static/uploads/{safe_string(e.image_filename)}" if e.image_filename else "",  # Full image URL
-            "category": {
-                "name": safe_string(ec.name),
-                "color": safe_string(ec.color),
-                "icon": safe_string(ec.icon)
+        slides = db.session.query(Slide).filter(Slide.is_active == True).order_by(Slide.sort_order).all()
+        return jsonify([
+            {
+                "id": s.id,
+                "title": safe_string(s.title),
+                "introduction": safe_string(s.introduction),
+                "filename": safe_string(s.image_filename), # Fixed: was s.filename
+                "button_text": safe_string(s.button_name), # Fixed: was s.button_text
+                "button_url": safe_string(s.button_url),
+                "open_method": safe_string(s.open_method),
+                "is_featured": s.is_featured,
+                "sort_order": s.sort_order,
+                "is_active": s.is_active,
+                "created": s.created,
+                "updated": s.updated,
             }
-        } for e, ec in events])
-        
+            for s in slides
+        ])
     except Exception as e:
-        return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load slides: {e}"}), 500
 
-@app.route('/api/homepage/meetings')
-def get_meetings():
-    """Get next meeting for each meeting type"""
+@app.route("/api/homepage/meetings")
+def get_homepage_meetings():
+    init_models()
     try:
-        if not Meeting or not MeetingType:
-            init_models()
+        today = datetime.now().date()
+        # Join with meeting_type table to get type name
+        meetings = db.session.query(Meeting, MeetingType).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).filter(Meeting.meeting_date >= today).order_by(Meeting.meeting_date).all()
         
-        # Get current date
-        today = date.today()
-        
-        # Get next meeting for each meeting type
-        meeting_types = db.session.query(MeetingType).all()
-        next_meetings = []
-        
-        for mt in meeting_types:
-            next_meeting = db.session.query(Meeting).filter(
-                Meeting.meeting_type_id == mt.id,
-                Meeting.meeting_date >= today,
-                Meeting.is_published == True
-            ).order_by(Meeting.meeting_date.asc(), Meeting.meeting_time.asc()).first()
-            
-            if next_meeting:
-                next_meetings.append((next_meeting, mt))
-        
-        return jsonify([{
-            "id": m.id,
-            "title": safe_string(m.title),
-            "date": m.meeting_date.isoformat() if m.meeting_date else "",
-            "time": m.meeting_time.strftime('%H:%M') if m.meeting_time else "",  # Added time field
-            "document_url": safe_string(m.agenda_filename or m.minutes_filename or m.draft_minutes_filename),
-            "type": safe_string(mt.name)
-        } for m, mt in next_meetings])
-        
-    except Exception as e:
-        return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
+        # Group meetings by type and get the next one for each type
+        next_meetings_by_type = {}
+        for m, mt in meetings:
+            if mt.name not in next_meetings_by_type:
+                next_meetings_by_type[mt.name] = {
+                    "id": m.id,
+                    "title": safe_string(m.title),
+                    "date": m.meeting_date.isoformat() if m.meeting_date else None,
+                    "time": safe_string(m.meeting_time), # Added time field
+                    "document_url": safe_string(m.agenda_filename or m.minutes_filename or m.draft_minutes_filename),
+                    "type": safe_string(mt.name) # Added the missing type field!
+                }
 
-@app.route('/api/homepage/quick-links')
-def get_quick_links():
-    """Get homepage quick links with correct field names"""
+        return jsonify(list(next_meetings_by_type.values()))
+    except Exception as e:
+        return jsonify({"error": f"Failed to load meetings: {e}"}), 500
+
+@app.route("/api/homepage/quick-links")
+def get_homepage_quick_links():
+    init_models()
     try:
-        if not HomepageQuicklink:
-            init_models()
-        
-        quicklinks = db.session.query(HomepageQuicklink).filter_by(is_active=True).order_by(HomepageQuicklink.sort_order).all()
-        
-        return jsonify([{
-            "id": ql.id,
-            "title": safe_string(ql.title),  # Fixed: was missing
-            "description": safe_string(ql.description),  # Fixed: was missing  
-            "button_text": safe_string(ql.button_name),  # Fixed: was missing
-            "url": safe_string(ql.button_url),
-            "open_method": safe_string(ql.open_method),
-            "sort_order": ql.sort_order,
-            "is_active": bool(ql.is_active)
-        } for ql in quicklinks])
-        
+        quick_links = db.session.query(QuickLink).filter(QuickLink.is_active == True).order_by(QuickLink.sort_order).all()
+        return jsonify([
+            {
+                "id": ql.id,
+                "title": safe_string(ql.title), # Fixed: was ql.name
+                "description": safe_string(ql.description), # Added description
+                "button_text": safe_string(ql.button_text), # Fixed: was ql.button_text
+                "button_url": safe_string(ql.button_url), # Fixed: was ql.url
+                "sort_order": ql.sort_order,
+                "is_active": ql.is_active,
+                "created": ql.created,
+                "updated": ql.updated,
+            }
+            for ql in quick_links
+        ])
     except Exception as e:
-        return jsonify({"error": f"Failed to load quick links: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load quick links: {e}"}), 500
 
-# Other API Routes (keeping all existing functionality)
+@app.route("/api/homepage/events")
+def get_homepage_events():
+    init_models()
+    try:
+        today = datetime.now().date()
+        events = db.session.query(Event, EventCategory).join(EventCategory, Event.event_category_id == EventCategory.id, isouter=True).filter(Event.start_date >= today).order_by(Event.start_date).limit(6).all()
+        return jsonify([
+            {
+                "id": e.id,
+                "title": safe_string(e.title),
+                "introduction": safe_string(e.introduction),
+                "image": safe_string(e.image_filename), # Added image
+                "start_date": e.start_date.isoformat() if e.start_date else None,
+                "end_date": e.end_date.isoformat() if e.end_date else None,
+                "start_time": safe_string(e.start_time),
+                "end_time": safe_string(e.end_time),
+                "location_name": safe_string(e.location_name),
+                "category": {
+                    "name": safe_string(ec.name),
+                    "color": safe_string(ec.color),
+                    "icon": safe_string(ec.icon)
+                } if ec else None,
+                "is_active": e.is_active,
+                "created": e.created,
+                "updated": e.updated,
+            }
+            for e, ec in events
+        ])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load events: {e}"}), 500
 
-@app.route('/api/councillors')
+@app.route("/api/councillors")
 def get_councillors():
-    """Get all councillors"""
+    init_models()
     try:
-        if not Councillor:
-            init_models()
-        
-        councillors = db.session.query(Councillor).filter_by(is_active=True).all()
-        
-        return jsonify([{
-            "id": c.id,
-            "name": safe_string(c.name),
-            "role": safe_string(c.title),  # Fixed: was c.role, now c.title
-            "phone": safe_string(c.phone),
-            "email": safe_string(c.email),
-            "bio": safe_string(c.bio),
-            "image": safe_string(c.image_filename),
-            "is_active": bool(c.is_active)
-        } for c in councillors])
-        
+        councillors = db.session.query(Councillor).filter(Councillor.is_active == True).order_by(Councillor.sort_order).all()
+        return jsonify([
+            {
+                "id": c.id,
+                "name": safe_string(c.name),
+                "role": safe_string(c.title), # Fixed: was c.role
+                "image": safe_string(c.image_filename),
+                "is_active": c.is_active,
+                "created": c.created,
+                "updated": c.updated,
+            }
+            for c in councillors
+        ])
     except Exception as e:
-        return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load councillors: {e}"}), 500
 
-@app.route('/api/councillors/<int:councillor_id>')
-def get_councillor_detail(councillor_id):
-    """Get individual councillor details with tags"""
+@app.route("/api/councillors/<int:councillor_id>")
+def get_councillor(councillor_id):
+    init_models()
     try:
-        if not Councillor or not Tag or not CouncillorTag:
-            init_models()
-        
-        councillor = db.session.query(Councillor).filter_by(id=councillor_id).first()
+        councillor = db.session.query(Councillor).filter(Councillor.id == councillor_id, Councillor.is_active == True).first()
         if not councillor:
             return jsonify({"error": "Councillor not found"}), 404
         
-        # Get councillor tags
-        tags = db.session.query(Tag).join(CouncillorTag).filter(CouncillorTag.councillor_id == councillor_id).all()
-        
+        # Get associated tags
+        tags = db.session.query(Tag).join(CouncillorTag, Tag.id == CouncillorTag.tag_id).filter(CouncillorTag.councillor_id == councillor_id).all()
+
         return jsonify({
             "id": councillor.id,
             "name": safe_string(councillor.name),
             "role": safe_string(councillor.title),
+            "image": safe_string(councillor.image_filename),
             "phone": safe_string(councillor.phone),
             "email": safe_string(councillor.email),
             "bio": safe_string(councillor.bio),
-            "image": safe_string(councillor.image_filename),
-            "is_active": bool(councillor.is_active),
+            "is_active": councillor.is_active,
+            "created": councillor.created,
+            "updated": councillor.updated,
             "tags": [{
                 "id": t.id,
                 "name": safe_string(t.name),
@@ -280,215 +237,189 @@ def get_councillor_detail(councillor_id):
                 "description": safe_string(t.description)
             } for t in tags]
         })
-        
     except Exception as e:
-        return jsonify({"error": f"Failed to load councillor: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load councillor: {e}"}), 500
 
-@app.route('/api/councillor-tags')
+@app.route("/api/councillor-tags")
 def get_councillor_tags():
-    """Get all councillor tags"""
+    init_models()
     try:
-        if not Tag:
-            init_models()
-        
         tags = db.session.query(Tag).all()
-        
-        return jsonify([{
-            "id": t.id,
-            "name": safe_string(t.name),
-            "color": safe_string(t.color),
-            "description": safe_string(t.description)
-        } for t in tags])
-        
-    except Exception as e:
-        return jsonify({"error": f"Failed to load tags: {str(e)}"}), 500
-
-@app.route('/api/events/<int:event_id>')
-def get_event_detail(event_id):
-    """Get individual event details"""
-    try:
-        if not Event or not EventCategory:
-            init_models()
-        
-        event = db.session.query(Event, EventCategory).join(
-            EventCategory, Event.category_id == EventCategory.id
-        ).filter(Event.id == event_id).first()
-        
-        if not event:
-            return jsonify({"error": "Event not found"}), 404
-        
-        e, ec = event
-        
-        return jsonify({
-            "id": e.id,
-            "title": safe_string(e.title),
-            "short_description": safe_string(e.short_description),
-            "description": safe_string(e.description),
-            "start_date": e.start_date.isoformat() if e.start_date else "",
-            "end_date": e.end_date.isoformat() if e.end_date else "",
-            "all_day": bool(e.all_day),
-            "location_name": safe_string(e.location_name),
-            "location_address": safe_string(e.location_address),
-            "location_url": safe_string(e.location_url),
-            "contact_name": safe_string(e.contact_name),
-            "contact_email": safe_string(e.contact_email),
-            "contact_phone": safe_string(e.contact_phone),
-            "booking_required": bool(e.booking_required),
-            "booking_url": safe_string(e.booking_url),
-            "max_attendees": e.max_attendees,
-            "is_free": bool(e.is_free),
-            "price": safe_string(e.price),
-            "image_filename": safe_string(e.image_filename),
-            "featured": bool(e.featured),
-            "status": safe_string(e.status),
-            "category": {
-                "id": ec.id,
-                "name": safe_string(ec.name),
-                "color": safe_string(ec.color),
-                "icon": safe_string(ec.icon),
-                "description": safe_string(ec.description)
+        return jsonify([
+            {
+                "id": t.id,
+                "name": safe_string(t.name),
+                "color": safe_string(t.color),
+                "description": safe_string(t.description)
             }
-        })
-        
+            for t in tags
+        ])
     except Exception as e:
-        return jsonify({"error": f"Failed to load event: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load councillor tags: {e}"}), 500
 
-@app.route('/api/event-categories')
-def get_event_categories():
-    """Get all event categories"""
-    try:
-        if not EventCategory:
-            init_models()
-        
-        categories = db.session.query(EventCategory).all()
-        
-        return jsonify([{
-            "id": c.id,
-            "name": safe_string(c.name),
-            "color": safe_string(c.color),
-            "icon": safe_string(c.icon),
-            "description": safe_string(c.description)
-        } for c in categories])
-        
-    except Exception as e:
-        return jsonify({"error": f"Failed to load event categories: {str(e)}"}), 500
-
-@app.route('/api/content/pages')
+@app.route("/api/content/pages")
 def get_content_pages():
-    """Get all content pages"""
+    init_models()
     try:
-        if not ContentPage or not ContentCategory:
-            init_models()
-        
-        pages = db.session.query(ContentPage, ContentCategory).join(
-            ContentCategory, ContentPage.category_id == ContentCategory.id
-        ).filter(ContentPage.is_published == True).all()
-        
-        return jsonify([{
-            "id": p.id,
-            "title": safe_string(p.title),
-            "description": safe_string(p.description),
-            "content": safe_string(p.content),
-            "category": {
+        pages = db.session.query(ContentPage, ContentCategory).join(ContentCategory, ContentPage.category_id == ContentCategory.id, isouter=True).filter(ContentPage.is_active == True).order_by(ContentPage.sort_order).all()
+        return jsonify([
+            {
+                "id": p.id,
+                "title": safe_string(p.title),
+                "introduction": safe_string(p.introduction),
+                "description": safe_string(p.description),
+                "category": {
+                    "id": cc.id,
+                    "name": safe_string(cc.name),
+                    "color": safe_string(cc.color),
+                    "url_path": safe_string(cc.url_path)
+                } if cc else None,
+                "is_active": p.is_active,
+                "created": p.created,
+                "updated": p.updated,
+            }
+            for p, cc in pages
+        ])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load content pages: {e}"}), 500
+
+@app.route("/api/content/categories")
+def get_content_categories():
+    init_models()
+    try:
+        categories = db.session.query(ContentCategory).filter(ContentCategory.is_active == True).order_by(ContentCategory.sort_order).all()
+        return jsonify([
+            {
                 "id": c.id,
                 "name": safe_string(c.name),
                 "color": safe_string(c.color),
-                "url_path": safe_string(c.url_path)
+                "url_path": safe_string(c.url_path),
+                "is_active": c.is_active,
+                "created": c.created,
+                "updated": c.updated,
             }
-        } for p, c in pages])
-        
+            for c in categories
+        ])
     except Exception as e:
-        return jsonify({"error": f"Failed to load content pages: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load content categories: {e}"}), 500
 
-@app.route('/api/content/categories')
-def get_content_categories():
-    """Get all content categories"""
-    try:
-        if not ContentCategory:
-            init_models()
-        
-        categories = db.session.query(ContentCategory).all()
-        
-        return jsonify([{
-            "id": c.id,
-            "name": safe_string(c.name),
-            "color": safe_string(c.color),
-            "url_path": safe_string(c.url_path),
-            "description": safe_string(c.description)
-        } for c in categories])
-        
-    except Exception as e:
-        return jsonify({"error": f"Failed to load content categories: {str(e)}"}), 500
-
-@app.route('/api/meeting-types')
+@app.route("/api/meeting-types")
 def get_meeting_types():
-    """Get all meeting types"""
+    init_models()
     try:
-        if not MeetingType:
-            init_models()
-        
-        meeting_types = db.session.query(MeetingType).all()
-        
-        return jsonify([{
-            "id": mt.id,
-            "name": safe_string(mt.name),
-            "description": safe_string(mt.description),
-            "color": safe_string(mt.color)
-        } for mt in meeting_types])
-        
+        meeting_types = db.session.query(MeetingType).filter(MeetingType.is_active == True).order_by(MeetingType.sort_order).all()
+        return jsonify([
+            {
+                "id": mt.id,
+                "name": safe_string(mt.name),
+                "description": safe_string(mt.description),
+                "color": safe_string(mt.color),
+                "is_active": mt.is_active,
+                "created": mt.created,
+                "updated": mt.updated,
+            }
+            for mt in meeting_types
+        ])
     except Exception as e:
-        return jsonify({"error": f"Failed to load meeting types: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load meeting types: {e}"}), 500
 
-@app.route('/api/meetings/type/<type_name>')
+@app.route("/api/meetings/type/<string:type_name>")
 def get_meetings_by_type(type_name):
-    """Get meetings by meeting type name"""
+    init_models()
     try:
-        if not Meeting or not MeetingType:
-            init_models()
-        
-        # URL decode the type name
-        import urllib.parse
-        decoded_type_name = urllib.parse.unquote(type_name)
-        
-        meetings = db.session.query(Meeting, MeetingType).join(
-            MeetingType, Meeting.meeting_type_id == MeetingType.id
-        ).filter(MeetingType.name == decoded_type_name).all()
-        
-        return jsonify([{
-            "id": m.id,
-            "title": safe_string(m.title),
-            "date": m.meeting_date.isoformat() if m.meeting_date else "",
-            "time": m.meeting_time.strftime('%H:%M') if m.meeting_time else "",
-            "location": safe_string(m.location),
-            "agenda_filename": safe_string(m.agenda_filename),
-            "minutes_filename": safe_string(m.minutes_filename),
-            "draft_minutes_filename": safe_string(m.draft_minutes_filename),
-            "status": safe_string(m.status),
-            "type": safe_string(mt.name)
-        } for m, mt in meetings])
-        
+        decoded_type_name = unquote(type_name)
+        meeting_type = db.session.query(MeetingType).filter(MeetingType.name == decoded_type_name).first()
+        if not meeting_type:
+            return jsonify({"error": "Meeting type not found"}), 404
+
+        meetings = db.session.query(Meeting).filter(Meeting.meeting_type_id == meeting_type.id).order_by(Meeting.meeting_date.desc()).all()
+        return jsonify([
+            {
+                "id": m.id,
+                "title": safe_string(m.title),
+                "date": m.meeting_date.isoformat() if m.meeting_date else None,
+                "time": safe_string(m.meeting_time),
+                "document_url": safe_string(m.agenda_filename or m.minutes_filename or m.draft_minutes_filename),
+                "is_active": m.is_active,
+                "created": m.created,
+                "updated": m.updated,
+            }
+            for m in meetings
+        ])
     except Exception as e:
-        return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to load meetings by type: {e}"}), 500
 
-# Frontend routes
-@app.route('/')
-def index():
-    return render_template('index.html')
+@app.route("/api/event-categories")
+def get_event_categories():
+    init_models()
+    try:
+        categories = db.session.query(EventCategory).filter(EventCategory.is_active == True).order_by(EventCategory.sort_order).all()
+        return jsonify([
+            {
+                "id": c.id,
+                "name": safe_string(c.name),
+                "description": safe_string(c.description),
+                "color": safe_string(c.color),
+                "icon": safe_string(c.icon),
+                "is_active": c.is_active,
+                "created": c.created,
+                "updated": c.updated,
+            }
+            for c in categories
+        ])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load event categories: {e}"}), 500
 
-# Smart catch-all route for SPA routing
-@app.route('/<path:path>')
-def catch_all(path):
-    """
-    Handle SPA routing while avoiding conflicts with static files
-    """
-    # Check if this looks like a file request (has file extension)
-    if '.' in path.split('/')[-1]:
-        # This looks like a file request, let Flask handle it normally
-        # If file doesn't exist, Flask will return 404
+@app.route("/api/events/<int:event_id>")
+def get_event(event_id):
+    init_models()
+    try:
+        event = db.session.query(Event).filter(Event.id == event_id, Event.is_active == True).first()
+        if not event:
+            return jsonify({"error": "Event not found"}), 404
+        
+        return jsonify({
+            "id": event.id,
+            "title": safe_string(event.title),
+            "introduction": safe_string(event.introduction),
+            "description": safe_string(event.description),
+            "image": safe_string(event.image_filename),
+            "start_date": event.start_date.isoformat() if event.start_date else None,
+            "end_date": event.end_date.isoformat() if event.end_date else None,
+            "start_time": safe_string(event.start_time),
+            "end_time": safe_string(event.end_time),
+            "location_name": safe_string(event.location_name),
+            "location_address": safe_string(event.location_address),
+            "location_postcode": safe_string(event.location_postcode),
+            "contact_name": safe_string(event.contact_name),
+            "contact_email": safe_string(event.contact_email),
+            "contact_phone": safe_string(event.contact_phone),
+            "booking_link": safe_string(event.booking_link),
+            "is_active": event.is_active,
+            "created": event.created,
+            "updated": event.updated,
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to load event: {e}"}), 500
+
+# === Frontend Serving ===
+@app.route("/login")
+def login():
+    return send_from_directory("dist", "index.html")
+
+@app.route("/assets/<path:filename>")
+def serve_assets(filename):
+    return send_from_directory(os.path.join(app.static_folder), filename)
+
+@app.route("/")
+def serve_frontend():
+    return send_from_directory("dist", "index.html")
+
+@app.route("/<path:path>")
+def serve_frontend_paths(path):
+    if path.startswith("api/") or path.startswith("admin/") or path.startswith("assets/"):
         return "Not Found", 404
-    
-    # This looks like a page route, serve the SPA
-    return render_template('index.html')
+    return send_from_directory("dist", "index.html")
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True)

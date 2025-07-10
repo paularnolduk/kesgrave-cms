@@ -4,6 +4,7 @@ from flask import Flask, send_from_directory, jsonify, request, redirect, url_fo
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from sqlalchemy.ext.automap import automap_base
+from urllib.parse import unquote
 
 app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
@@ -153,7 +154,6 @@ def get_events():
     except Exception as e:
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 
-# === NEW MISSING API Routes ===
 @app.route('/api/content/pages')
 def get_content_pages():
     try:
@@ -210,6 +210,46 @@ def get_meeting_types():
         } for mt in meeting_types])
     except Exception as e:
         return jsonify({"error": f"Failed to load meeting types: {str(e)}"}), 500
+
+# === NEW: Meetings by Type API ===
+@app.route('/api/meetings/type/<type_name>')
+def get_meetings_by_type(type_name):
+    try:
+        init_models()
+        # URL decode the type name
+        decoded_type_name = unquote(type_name)
+        
+        # Join meetings with meeting_type to filter by type name
+        meetings = db.session.query(Meeting).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).filter(MeetingType.name == decoded_type_name).all()
+        
+        return jsonify([{
+            "id": m.id,
+            "title": safe_string(m.title),
+            "date": m.meeting_date,
+            "time": safe_string(str(m.meeting_time)) if m.meeting_time else "",
+            "location": safe_string(m.location),
+            "agenda_filename": safe_string(m.agenda_filename),
+            "minutes_filename": safe_string(m.minutes_filename),
+            "draft_minutes_filename": safe_string(m.draft_minutes_filename),
+            "schedule_applications_filename": safe_string(m.schedule_applications_filename),
+            "audio_filename": safe_string(m.audio_filename),
+            "status": safe_string(m.status),
+            "is_published": m.is_published,
+            "notes": safe_string(m.notes),
+            "agenda_title": safe_string(m.agenda_title),
+            "agenda_description": safe_string(m.agenda_description),
+            "minutes_title": safe_string(m.minutes_title),
+            "minutes_description": safe_string(m.minutes_description),
+            "draft_minutes_title": safe_string(m.draft_minutes_title),
+            "draft_minutes_description": safe_string(m.draft_minutes_description),
+            "schedule_applications_title": safe_string(m.schedule_applications_title),
+            "schedule_applications_description": safe_string(m.schedule_applications_description),
+            "audio_title": safe_string(m.audio_title),
+            "audio_description": safe_string(m.audio_description),
+            "summary_url": safe_string(m.summary_url)
+        } for m in meetings])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load meetings for type '{type_name}': {str(e)}"}), 500
 
 # === Static and Admin Routing ===
 @app.route("/admin")

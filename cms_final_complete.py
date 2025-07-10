@@ -53,8 +53,8 @@ def get_homepage_slides():
             "id": s.id,
             "title": s.title,
             "introduction": s.introduction,
-            "image": s.filename,
-            "button_text": s.button_text,
+            "image": s.image_filename,
+            "button_text": s.button_name,
             "button_url": s.button_url,
             "open_method": s.open_method,
             "is_featured": s.is_featured,
@@ -101,7 +101,7 @@ def get_meetings():
             "id": m.id,
             "title": m.title,
             "date": m.meeting_date,
-            "document_url": m.document_url
+            "document_url": m.agenda_filename or m.minutes_filename
         } for m in meetings])
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500

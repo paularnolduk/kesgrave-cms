@@ -101,6 +101,10 @@ def get_homepage_slides():
     except Exception as e:
         return jsonify({"error": f"Failed to load slides: {str(e)}"}), 500
 
+@app.route("/slider-fix.js")
+def serve_slider_fix():
+    return send_from_directory(basedir, "slider-fix.js")
+
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
     try:

@@ -47,6 +47,10 @@ def init_models():
             Meeting = Base.classes.meeting
             Event = Base.classes.event
 
+def safe_string(value):
+    """Convert None/null values to empty string"""
+    return value if value is not None else ""
+
 # Test database connection
 try:
     with app.app_context():
@@ -66,12 +70,12 @@ def get_homepage_slides():
         slides = db.session.query(Slide).all()
         return jsonify([{
             "id": s.id,
-            "title": s.title,
-            "introduction": s.introduction,
-            "image": s.image_filename,  # FIXED: was s.filename, now s.image_filename
-            "button_text": s.button_name,  # FIXED: was s.button_text, now s.button_name
-            "button_url": s.button_url,
-            "open_method": s.open_method,
+            "title": safe_string(s.title),
+            "introduction": safe_string(s.introduction),
+            "image": safe_string(s.image_filename),  # FIXED: was s.filename, now s.image_filename
+            "button_text": safe_string(s.button_name),  # FIXED: was s.button_text, now s.button_name
+            "button_url": safe_string(s.button_url),
+            "open_method": safe_string(s.open_method),
             "is_featured": s.is_featured,
             "sort_order": s.sort_order,
             "is_active": s.is_active
@@ -86,9 +90,9 @@ def get_quick_links():
         links = db.session.query(QuickLink).all()
         return jsonify([{
             "id": l.id,
-            "label": l.title,  # FIXED: was l.name, now l.title
-            "icon": getattr(l, 'icon', ''),  # Handle missing icon column gracefully
-            "url": l.button_url,  # FIXED: was l.url, now l.button_url
+            "label": safe_string(l.title),  # FIXED: was l.name, now l.title
+            "icon": safe_string(getattr(l, 'icon', '')),  # Handle missing icon column gracefully
+            "url": safe_string(l.button_url),  # FIXED: was l.url, now l.button_url
             "sort_order": l.sort_order,
             "is_active": l.is_active
         } for l in links])
@@ -102,10 +106,10 @@ def get_councillors():
         councillors = db.session.query(Councillor).all()
         return jsonify([{
             "id": c.id,
-            "name": c.name,
-            "role": c.role,
-            "phone": c.phone,
-            "email": c.email
+            "name": safe_string(c.name),
+            "role": safe_string(c.role),
+            "phone": safe_string(c.phone),
+            "email": safe_string(c.email)
         } for c in councillors])
     except Exception as e:
         return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
@@ -117,9 +121,9 @@ def get_meetings():
         meetings = db.session.query(Meeting).all()
         return jsonify([{
             "id": m.id,
-            "title": m.title,
+            "title": safe_string(m.title),
             "date": m.meeting_date,  # FIXED: This was already correct
-            "document_url": m.agenda_filename or m.minutes_filename or m.draft_minutes_filename  # FIXED: Use available document fields
+            "document_url": safe_string(m.agenda_filename or m.minutes_filename or m.draft_minutes_filename)  # FIXED: Use available document fields + null safety
         } for m in meetings])
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
@@ -131,10 +135,10 @@ def get_events():
         events = db.session.query(Event).all()
         return jsonify([{
             "id": e.id,
-            "title": e.title,
-            "description": e.description,
+            "title": safe_string(e.title),
+            "description": safe_string(e.description),
             "date": e.start_date,  # FIXED: was e.event_date, now e.start_date
-            "location": e.location_name  # FIXED: was e.location, now e.location_name
+            "location": safe_string(e.location_name)  # FIXED: was e.location, now e.location_name
         } for e in events])
     except Exception as e:
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500

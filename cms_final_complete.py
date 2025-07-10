@@ -27,12 +27,12 @@ db = SQLAlchemy(app)
 
 try:
     conn = sqlite3.connect(db_path)
-    print("\u2705 Database connected successfully")
+    print("✅ Database connected successfully")
     tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
-    print("\ud83d\udccb Tables in DB:", tables)
+    print("📋 Tables in DB:", tables)
     conn.close()
 except Exception as e:
-    print("\u274C Failed to connect to DB:", e)
+    print("❌ Failed to connect to DB:", e)
 
 # === Reflect Models ===
 Base = automap_base()
@@ -53,8 +53,8 @@ def get_homepage_slides():
             "id": s.id,
             "title": s.title,
             "introduction": s.introduction,
-            "image": s.image_filename,
-            "button_text": s.button_name,
+            "image": s.image_filename,  # FIXED: was s.filename, now s.image_filename
+            "button_text": s.button_name,  # FIXED: was s.button_text, now s.button_name
             "button_url": s.button_url,
             "open_method": s.open_method,
             "is_featured": s.is_featured,
@@ -70,9 +70,9 @@ def get_quick_links():
         links = db.session.query(QuickLink).all()
         return jsonify([{
             "id": l.id,
-            "label": l.name,
-            "icon": l.icon,
-            "url": l.url,
+            "label": l.title,  # FIXED: was l.name, now l.title
+            "icon": getattr(l, 'icon', ''),  # Handle missing icon column gracefully
+            "url": l.button_url,  # FIXED: was l.url, now l.button_url
             "sort_order": l.sort_order,
             "is_active": l.is_active
         } for l in links])
@@ -100,8 +100,8 @@ def get_meetings():
         return jsonify([{
             "id": m.id,
             "title": m.title,
-            "date": m.meeting_date,
-            "document_url": m.agenda_filename or m.minutes_filename
+            "date": m.meeting_date,  # FIXED: This was already correct
+            "document_url": m.agenda_filename or m.minutes_filename or m.draft_minutes_filename  # FIXED: Use available document fields
         } for m in meetings])
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
@@ -114,8 +114,8 @@ def get_events():
             "id": e.id,
             "title": e.title,
             "description": e.description,
-            "date": e.event_date,
-            "location": e.location
+            "date": e.start_date,  # FIXED: was e.event_date, now e.start_date
+            "location": e.location_name  # FIXED: was e.location, now e.location_name
         } for e in events])
     except Exception as e:
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
@@ -149,3 +149,4 @@ def serve_frontend_paths(path):
 
 if __name__ == '__main__':
     app.run(debug=True)
+

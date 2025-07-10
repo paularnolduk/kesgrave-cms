@@ -7,10 +7,8 @@ from flask_cors import CORS
 app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
 
-# Use the correct SQLite DB in the instance folder with absolute path
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-# === Render fix: use /tmp for write access ===
 if os.environ.get("RENDER"):
     tmp_db_path = "/tmp/kesgrave_working.db"
     original_path = os.path.join(basedir, "instance", "kesgrave_working.db")
@@ -26,7 +24,6 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
-# Debug DB connection
 try:
     conn = sqlite3.connect(db_path)
     print("\u2705 Database connected successfully")
@@ -40,82 +37,81 @@ except Exception as e:
 class Slide(db.Model):
     __tablename__ = 'homepage_slide'
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String)
+    title = db.Column(db.Text)
     introduction = db.Column(db.Text)
-    image = db.Column(db.String)
-    button_text = db.Column(db.String)
-    button_url = db.Column(db.String)
-    open_method = db.Column(db.String)
-    is_featured = db.Column(db.Boolean)
+    image = db.Column(db.Text)
+    button_text = db.Column(db.Text)
+    button_url = db.Column(db.Text)
+    open_method = db.Column(db.Text)
+    is_featured = db.Column(db.Integer)
     sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    is_active = db.Column(db.Integer)
+    created = db.Column(db.Text)
+    updated = db.Column(db.Text)
 
 class QuickLink(db.Model):
     __tablename__ = 'homepage_quicklink'
     id = db.Column(db.Integer, primary_key=True)
-    label = db.Column(db.String)
-    icon = db.Column(db.String)
-    url = db.Column(db.String)
+    label = db.Column(db.Text)
+    icon = db.Column(db.Text)
+    url = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    is_active = db.Column(db.Integer)
+    created = db.Column(db.Text)
+    updated = db.Column(db.Text)
 
 class Councillor(db.Model):
     __tablename__ = 'councillor'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
-    role = db.Column(db.String)
-    phone = db.Column(db.String)
-    email = db.Column(db.String)
+    name = db.Column(db.Text)
+    role = db.Column(db.Text)
+    phone = db.Column(db.Text)
+    email = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    is_active = db.Column(db.Integer)
+    created = db.Column(db.Text)
+    updated = db.Column(db.Text)
 
 class Meeting(db.Model):
     __tablename__ = 'meeting'
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String)
-    date = db.Column(db.String)
-    document_url = db.Column(db.String)
+    title = db.Column(db.Text)
+    meeting_date = db.Column(db.Text)
+    document_url = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    is_active = db.Column(db.Integer)
+    created = db.Column(db.Text)
+    updated = db.Column(db.Text)
 
 class Event(db.Model):
     __tablename__ = 'event'
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String)
+    title = db.Column(db.Text)
     description = db.Column(db.Text)
-    date = db.Column(db.String)
-    location = db.Column(db.String)
+    event_date = db.Column(db.Text)
+    location = db.Column(db.Text)
     sort_order = db.Column(db.Integer)
-    is_active = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    is_active = db.Column(db.Integer)
+    created = db.Column(db.Text)
+    updated = db.Column(db.Text)
 
 # === API Routes ===
 @app.route('/api/homepage/slides')
 def get_homepage_slides():
     try:
         slides = Slide.query.all()
-        return jsonify([
-            {
-                "id": s.id,
-                "title": s.title,
-                "introduction": s.introduction,
-                "image": s.image,
-                "button_text": s.button_text,
-                "button_url": s.button_url,
-                "open_method": s.open_method,
-                "is_featured": s.is_featured,
-                "sort_order": s.sort_order,
-                "is_active": s.is_active
-            } for s in slides])
+        return jsonify([{
+            "id": s.id,
+            "title": s.title,
+            "introduction": s.introduction,
+            "image": s.image,
+            "button_text": s.button_text,
+            "button_url": s.button_url,
+            "open_method": s.open_method,
+            "is_featured": s.is_featured,
+            "sort_order": s.sort_order,
+            "is_active": s.is_active
+        } for s in slides])
     except Exception as e:
         return jsonify({"error": f"Failed to load slides: {str(e)}"}), 500
 
@@ -123,14 +119,14 @@ def get_homepage_slides():
 def get_quick_links():
     try:
         links = QuickLink.query.all()
-        return jsonify([
-            {
-                "id": l.id,
-                "label": l.label,
-                "icon": l.icon,
-                "url": l.url,
-                "sort_order": l.sort_order
-            } for l in links])
+        return jsonify([{
+            "id": l.id,
+            "label": l.label,
+            "icon": l.icon,
+            "url": l.url,
+            "sort_order": l.sort_order,
+            "is_active": l.is_active
+        } for l in links])
     except Exception as e:
         return jsonify({"error": f"Failed to load quick links: {str(e)}"}), 500
 
@@ -138,14 +134,13 @@ def get_quick_links():
 def get_councillors():
     try:
         councillors = Councillor.query.all()
-        return jsonify([
-            {
-                "id": c.id,
-                "name": c.name,
-                "role": c.role,
-                "phone": c.phone,
-                "email": c.email
-            } for c in councillors])
+        return jsonify([{
+            "id": c.id,
+            "name": c.name,
+            "role": c.role,
+            "phone": c.phone,
+            "email": c.email
+        } for c in councillors])
     except Exception as e:
         return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
 
@@ -153,13 +148,12 @@ def get_councillors():
 def get_meetings():
     try:
         meetings = Meeting.query.all()
-        return jsonify([
-            {
-                "id": m.id,
-                "title": m.title,
-                "date": m.date,
-                "document_url": m.document_url
-            } for m in meetings])
+        return jsonify([{
+            "id": m.id,
+            "title": m.title,
+            "date": m.meeting_date,
+            "document_url": m.document_url
+        } for m in meetings])
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
 
@@ -167,18 +161,17 @@ def get_meetings():
 def get_events():
     try:
         events = Event.query.all()
-        return jsonify([
-            {
-                "id": e.id,
-                "title": e.title,
-                "description": e.description,
-                "date": e.date,
-                "location": e.location
-            } for e in events])
+        return jsonify([{
+            "id": e.id,
+            "title": e.title,
+            "description": e.description,
+            "date": e.event_date,
+            "location": e.location
+        } for e in events])
     except Exception as e:
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 
-# === Serve Static and Admin ===
+# === Static and Admin Routing ===
 @app.route("/admin")
 def admin_root():
     return redirect("/admin/login")

@@ -7,16 +7,28 @@ from flask_cors import CORS
 app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
 
-# Use the correct SQLite DB in the instance folder
+# Use the correct SQLite DB in the instance folder with absolute path
 basedir = os.path.abspath(os.path.dirname(__file__))
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(basedir, 'instance', 'kesgrave_working.db')}"
+
+# === Render fix: use /tmp for write access ===
+if os.environ.get("RENDER"):
+    tmp_db_path = "/tmp/kesgrave_working.db"
+    original_path = os.path.join(basedir, "instance", "kesgrave_working.db")
+    if not os.path.exists(tmp_db_path):
+        import shutil
+        shutil.copyfile(original_path, tmp_db_path)
+    db_path = tmp_db_path
+else:
+    db_path = os.path.join(basedir, "instance", "kesgrave_working.db")
+
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
 # Debug DB connection
 try:
-    conn = sqlite3.connect("instance/kesgrave_working.db")
+    conn = sqlite3.connect(db_path)
     print("\u2705 Database connected successfully")
     conn.close()
 except Exception as e:
@@ -57,10 +69,12 @@ class ContentBlock(db.Model):
 def get_homepage_slides():
     try:
         slides = Slide.query.all()
-        print(f"Slides found: {len(slides)}")
+        print(f"✅ Slides found: {len(slides)}")
         return jsonify([{"id": s.id, "title": s.title, "image_url": s.image_url} for s in slides])
     except Exception as e:
-        print("\u274C Error loading slides:", e)
+        print("❌ Error loading slides:", e)
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": "Failed to load slides"}), 500
 
 @app.route('/api/councillors')

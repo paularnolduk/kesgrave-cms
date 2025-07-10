@@ -49,19 +49,19 @@ class Slide(db.Model):
     is_featured = db.Column(db.Boolean)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Boolean)
-    created = db.Column(db.DateTime)
-    updated = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 class QuickLink(db.Model):
     __tablename__ = 'homepage_quicklink'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
+    label = db.Column(db.String)
     icon = db.Column(db.String)
     url = db.Column(db.String)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Boolean)
-    created = db.Column(db.DateTime)
-    updated = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 class Councillor(db.Model):
     __tablename__ = 'councillor'
@@ -72,31 +72,31 @@ class Councillor(db.Model):
     email = db.Column(db.String)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Boolean)
-    created = db.Column(db.DateTime)
-    updated = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 class Meeting(db.Model):
     __tablename__ = 'meeting'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String)
-    meeting_date = db.Column(db.String)
-    download_url = db.Column(db.String)
+    date = db.Column(db.String)
+    document_url = db.Column(db.String)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Boolean)
-    created = db.Column(db.DateTime)
-    updated = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 class Event(db.Model):
     __tablename__ = 'event'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String)
     description = db.Column(db.Text)
-    event_date = db.Column(db.String)
+    date = db.Column(db.String)
     location = db.Column(db.String)
     sort_order = db.Column(db.Integer)
     is_active = db.Column(db.Boolean)
-    created = db.Column(db.DateTime)
-    updated = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime)
 
 # === API Routes ===
 @app.route('/api/homepage/slides')
@@ -126,7 +126,7 @@ def get_quick_links():
         return jsonify([
             {
                 "id": l.id,
-                "name": l.name,
+                "label": l.label,
                 "icon": l.icon,
                 "url": l.url,
                 "sort_order": l.sort_order
@@ -157,8 +157,8 @@ def get_meetings():
             {
                 "id": m.id,
                 "title": m.title,
-                "meeting_date": m.meeting_date,
-                "download_url": m.download_url
+                "date": m.date,
+                "document_url": m.document_url
             } for m in meetings])
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
@@ -172,7 +172,7 @@ def get_events():
                 "id": e.id,
                 "title": e.title,
                 "description": e.description,
-                "event_date": e.event_date,
+                "date": e.date,
                 "location": e.location
             } for e in events])
     except Exception as e:

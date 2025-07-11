@@ -7,7 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from sqlalchemy.ext.automap import automap_base
 from urllib.parse import unquote
-from datetime import datetime
+from datetime import datetime, date
 
 app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
@@ -410,16 +410,79 @@ def get_content_categories():
 def get_meeting_types():
     try:
         init_models()
-        meeting_types = db.session.query(MeetingType).all()
-        return jsonify([{
-            "id": mt.id,
-            "name": safe_string(mt.name),
-            "description": safe_string(mt.description),
-            "color": safe_string(mt.color),
-            "is_predefined": mt.is_predefined,
-            "is_active": mt.is_active,
-            "show_schedule_applications": mt.show_schedule_applications
-        } for mt in meeting_types])
+        
+        # Get all active meeting types
+        meeting_types = db.session.query(MeetingType).filter(MeetingType.is_active == True).all()
+        
+        # Filter to only show specific meeting types that should appear on the page
+        allowed_meeting_types = [
+            'Community and Recreation',
+            'Finance and Governance', 
+            'Full Council Meetings',
+            'Planning and Development',
+            'Annual Town Meeting'  # This will be moved to last position
+        ]
+        
+        # Filter meeting types
+        filtered_types = [mt for mt in meeting_types if mt.name in allowed_meeting_types]
+        
+        # Custom ordering: Annual Town Meeting should be last
+        def get_sort_order(meeting_type_name):
+            order_map = {
+                'Community and Recreation': 1,
+                'Finance and Governance': 2,
+                'Full Council Meetings': 3,
+                'Planning and Development': 4,
+                'Annual Town Meeting': 5  # Last position
+            }
+            return order_map.get(meeting_type_name, 999)
+        
+        # Sort meeting types by custom order
+        filtered_types.sort(key=lambda mt: get_sort_order(mt.name))
+        
+        result = []
+        today = date.today()
+        
+        for mt in filtered_types:
+            # Get the next upcoming meeting for this type
+            next_meeting = db.session.query(Meeting).filter(
+                Meeting.meeting_type_id == mt.id,
+                Meeting.meeting_date >= today,
+                Meeting.is_published == True
+            ).order_by(Meeting.meeting_date.asc()).first()
+            
+            # Count total meetings for this type
+            meeting_count = db.session.query(Meeting).filter(
+                Meeting.meeting_type_id == mt.id,
+                Meeting.is_published == True
+            ).count()
+            
+            # Build next meeting data if exists
+            next_meeting_data = None
+            if next_meeting:
+                next_meeting_data = {
+                    "id": next_meeting.id,
+                    "title": safe_string(next_meeting.title),
+                    "date": next_meeting.meeting_date.strftime('%d/%m/%Y') if next_meeting.meeting_date else None,
+                    "time": str(next_meeting.meeting_time)[:5] if next_meeting.meeting_time else "",  # HH:MM format
+                    "location": safe_string(next_meeting.location),
+                    "agenda_filename": safe_string(next_meeting.agenda_filename),
+                    "schedule_applications_filename": safe_string(next_meeting.schedule_applications_filename),
+                    "status": safe_string(next_meeting.status)
+                }
+            
+            result.append({
+                "id": mt.id,
+                "name": safe_string(mt.name),
+                "description": safe_string(mt.description),
+                "color": safe_string(mt.color),
+                "is_active": mt.is_active,
+                "show_schedule_applications": mt.show_schedule_applications,
+                "meeting_count": meeting_count,
+                "next_meeting": next_meeting_data  # ADDED: Next meeting data
+            })
+        
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": f"Failed to load meeting types: {str(e)}"}), 500
 
@@ -461,6 +524,89 @@ def get_meetings_by_type(type_name):
         } for m in meetings])
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings for type '{type_name}': {str(e)}"}), 500
+
+@app.route('/api/meetings/<int:meeting_id>')
+def get_meeting_detail(meeting_id):
+    try:
+        init_models()
+        meeting = db.session.query(Meeting).filter(Meeting.id == meeting_id).first()
+        
+        if not meeting:
+            return jsonify({"error": "Meeting not found"}), 404
+        
+        # Get meeting type info
+        meeting_type = db.session.query(MeetingType).filter(MeetingType.id == meeting.meeting_type_id).first()
+        
+        # Build file URLs
+        agenda_url = None
+        if meeting.agenda_filename:
+            agenda_url = f"/uploads/meetings/{meeting.agenda_filename}"
+        
+        schedule_applications_url = None
+        if meeting.schedule_applications_filename:
+            schedule_applications_url = f"/uploads/meetings/{meeting.schedule_applications_filename}"
+        
+        minutes_url = None
+        if meeting.minutes_filename:
+            minutes_url = f"/uploads/meetings/{meeting.minutes_filename}"
+        
+        draft_minutes_url = None
+        if meeting.draft_minutes_filename:
+            draft_minutes_url = f"/uploads/meetings/{meeting.draft_minutes_filename}"
+        
+        audio_url = None
+        if meeting.audio_filename:
+            audio_url = f"/uploads/meetings/{meeting.audio_filename}"
+        
+        return jsonify({
+            "id": meeting.id,
+            "title": safe_string(meeting.title),
+            "meeting_type": {
+                "id": meeting_type.id if meeting_type else None,
+                "name": safe_string(meeting_type.name) if meeting_type else "",
+                "color": safe_string(meeting_type.color) if meeting_type else "",
+                "show_schedule_applications": meeting_type.show_schedule_applications if meeting_type else False
+            },
+            "date": meeting.meeting_date.strftime('%d/%m/%Y') if meeting.meeting_date else None,
+            "time": str(meeting.meeting_time)[:5] if meeting.meeting_time else "",
+            "location": safe_string(meeting.location),
+            "status": safe_string(meeting.status),
+            "is_published": meeting.is_published,
+            "notes": safe_string(meeting.notes),
+            "agenda": {
+                "filename": safe_string(meeting.agenda_filename),
+                "file_url": agenda_url,
+                "title": safe_string(safe_getattr(meeting, 'agenda_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'agenda_description', ''))
+            } if meeting.agenda_filename else None,
+            "schedule_applications": {
+                "filename": safe_string(meeting.schedule_applications_filename),
+                "file_url": schedule_applications_url,
+                "title": safe_string(safe_getattr(meeting, 'schedule_applications_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'schedule_applications_description', ''))
+            } if meeting.schedule_applications_filename else None,
+            "minutes": {
+                "filename": safe_string(meeting.minutes_filename),
+                "file_url": minutes_url,
+                "title": safe_string(safe_getattr(meeting, 'minutes_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'minutes_description', ''))
+            } if meeting.minutes_filename else None,
+            "draft_minutes": {
+                "filename": safe_string(meeting.draft_minutes_filename),
+                "file_url": draft_minutes_url,
+                "title": safe_string(safe_getattr(meeting, 'draft_minutes_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'draft_minutes_description', ''))
+            } if meeting.draft_minutes_filename else None,
+            "audio": {
+                "filename": safe_string(meeting.audio_filename),
+                "file_url": audio_url,
+                "title": safe_string(safe_getattr(meeting, 'audio_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'audio_description', ''))
+            } if meeting.audio_filename else None,
+            "summary_url": safe_string(safe_getattr(meeting, 'summary_url', ''))
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to load meeting details: {str(e)}"}), 500
 
 # === EVENT API Routes ===
 @app.route('/api/event-categories')

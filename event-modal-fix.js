@@ -3,10 +3,11 @@
  * Enhances event modal with images, tags, content sections, and keyboard support
  */
 
+
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (clean layout version)');
+    console.log('🔧 Event modal fix script loaded (data direct version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -126,8 +127,16 @@
                 const title = titleElement.textContent.trim();
                 console.log(`🔍 Found element with selector "${selector}":`, title);
                 if (title) {
-                    console.log('✅ Successfully extracted title:', title);
-                    return title;
+                    // Try to extract just the event name from the text
+                    let cleanTitle = title;
+                    
+                    // Remove common patterns that might be appended
+                    cleanTitle = cleanTitle.replace(/\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}.*$/i, '').trim(); // Remove time
+                    cleanTitle = cleanTitle.replace(/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday).*$/i, '').trim(); // Remove date
+                    cleanTitle = cleanTitle.replace(/\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December).*$/i, '').trim(); // Remove date
+                    
+                    console.log('✅ Successfully extracted and cleaned title:', cleanTitle);
+                    return cleanTitle;
                 }
             } else {
                 console.log(`❌ No element found for selector: ${selector}`);
@@ -168,7 +177,7 @@
                 if (eventData) {
                     currentEventData = eventData;
                     console.log('🖼️ Adding image to modal...');
-                    addEventImageWithCleanText(modal, eventData);
+                    addEventImageWithDirectData(modal, eventData);
                     console.log('📋 Adding related sections...');
                     addRelatedSections(modal, eventData);
                 } else {
@@ -185,9 +194,9 @@
         enhanceCloseButtons(modal);
     }
     
-    // Add event image with clean text layout
-    function addEventImageWithCleanText(modal, eventData) {
-        console.log('🖼️ addEventImageWithCleanText called with:', eventData);
+    // Add event image using direct data (no text extraction from modal)
+    function addEventImageWithDirectData(modal, eventData) {
+        console.log('🖼️ addEventImageWithDirectData called with:', eventData);
         
         if (!eventData.image) {
             console.log('ℹ️ No image available for event, image field:', eventData.image);
@@ -196,7 +205,7 @@
         
         console.log('✅ Image available:', eventData.image);
         
-        // Find the modal header - look in the container and its children
+        // Find the modal header
         const headerSelectors = [
             '.event-modal-header',
             '[class*="modal-header"]',
@@ -223,7 +232,7 @@
             return;
         }
         
-        console.log('🖼️ Adding event image with clean text layout to modal header');
+        console.log('🖼️ Adding event image with direct data to modal header');
         
         // Create background image overlay
         const imageOverlay = document.createElement('div');
@@ -256,26 +265,12 @@
         
         modalHeader.appendChild(imageOverlay);
         
-        // Extract clean text content from existing containers
-        const existingContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
-        let titleText = '';
+        // Use event data directly for clean text
+        const titleText = eventData.title || 'Event';
+        
+        // Format date properly
         let dateText = '';
-        let timeText = '';
-        
-        existingContainers.forEach(container => {
-            const text = container.textContent.trim();
-            if (text.includes('Market') || text.includes('Fair') || text.includes('Fireworks') || text.includes('Night')) {
-                titleText = text;
-            } else if (text.includes('Saturday') || text.includes('Tuesday') || text.includes('Sunday') || text.includes('Monday') || text.includes('Wednesday') || text.includes('Thursday') || text.includes('Friday')) {
-                dateText = text;
-            } else if (text.includes(':') && text.includes('-')) {
-                timeText = text;
-            }
-        });
-        
-        // If we couldn't extract properly, try to get from the event data
-        if (!titleText) titleText = eventData.title || 'Event';
-        if (!dateText && eventData.date) {
+        if (eventData.date) {
             const eventDate = new Date(eventData.date);
             dateText = eventDate.toLocaleDateString('en-GB', { 
                 weekday: 'long', 
@@ -284,11 +279,43 @@
                 year: 'numeric' 
             });
         }
-        if (!timeText && eventData.time) timeText = eventData.time;
         
-        console.log('📝 Extracted text:', { titleText, dateText, timeText });
+        // Format time properly
+        let timeText = '';
+        if (eventData.time) {
+            timeText = eventData.time;
+        } else if (eventData.start_time && eventData.end_time) {
+            timeText = `${eventData.start_time} - ${eventData.end_time}`;
+        } else if (eventData.date) {
+            // Try to extract time from date if it's a datetime
+            const eventDate = new Date(eventData.date);
+            const hours = eventDate.getHours();
+            const minutes = eventDate.getMinutes();
+            if (hours !== 0 || minutes !== 0) {
+                timeText = eventDate.toLocaleTimeString('en-GB', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false 
+                });
+                // Add estimated end time (2 hours later)
+                const endDate = new Date(eventDate.getTime() + 2 * 60 * 60 * 1000);
+                timeText += ` - ${endDate.toLocaleTimeString('en-GB', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false 
+                })}`;
+            }
+        }
         
-        // Create unified text container with clean layout
+        console.log('📝 Using direct data:', { titleText, dateText, timeText });
+        
+        // Remove any existing text containers
+        const existingContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content, .event-modal-unified-text-container');
+        existingContainers.forEach(container => {
+            container.remove();
+        });
+        
+        // Create unified text container with clean layout using direct data
         const unifiedContainer = document.createElement('div');
         unifiedContainer.className = 'event-modal-unified-text-container';
         
@@ -317,11 +344,6 @@
             text-shadow: 0 1px 2px rgba(0,0,0,0.5);
         `;
         
-        // Remove the old containers
-        existingContainers.forEach(container => {
-            container.remove();
-        });
-        
         // Add the new unified container
         modalHeader.appendChild(unifiedContainer);
         
@@ -349,14 +371,14 @@
             console.log('✅ Added featured badge');
         }
         
-        console.log('✅ Successfully added image with clean text layout to modal');
+        console.log('✅ Successfully added image with clean text layout using direct data');
     }
     
     // Add related sections (simplified for debugging)
     function addRelatedSections(modal, eventData) {
         console.log('📋 addRelatedSections called');
         
-        // Find the modal body - look in the container
+        // Find the modal body
         const bodySelectors = [
             '.event-modal-body',
             '.event-modal-content',
@@ -519,7 +541,7 @@
             escapeHandler = null;
         }
         
-        // Try to find and click the existing close button (look in backdrop or container)
+        // Try to find and click the existing close button
         const backdrop = modal.closest('.event-modal-backdrop') || document.querySelector('.event-modal-backdrop');
         const searchArea = backdrop || modal;
         

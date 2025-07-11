@@ -37,6 +37,9 @@ Meeting = None
 Event = None
 ContentPage = None
 ContentCategory = None
+ContentGallery = None
+ContentDownload = None
+ContentLink = None
 MeetingType = None
 EventCategory = None
 Tag = None
@@ -44,7 +47,7 @@ CouncillorTag = None
 
 def init_models():
     """Initialize models within application context"""
-    global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, MeetingType, EventCategory, Tag, CouncillorTag
+    global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, ContentGallery, ContentDownload, ContentLink, MeetingType, EventCategory, Tag, CouncillorTag
     
     if Slide is None:  # Only initialize once
         with app.app_context():
@@ -58,6 +61,9 @@ def init_models():
             Event = Base.classes.event
             ContentPage = Base.classes.content_page
             ContentCategory = Base.classes.content_category
+            ContentGallery = Base.classes.content_gallery
+            ContentDownload = Base.classes.content_download
+            ContentLink = Base.classes.content_link
             MeetingType = Base.classes.meeting_type
             EventCategory = Base.classes.event_category
             Tag = Base.classes.tag
@@ -509,6 +515,45 @@ def get_content_page_by_slug(slug):
         # Use the most recent date as updated_at
         updated_at = page.last_reviewed or page.approval_date or page.creation_date
         
+        # Get gallery images for this page
+        gallery_images = []
+        gallery_items = db.session.query(ContentGallery).filter(ContentGallery.content_page_id == page.id).order_by(ContentGallery.sort_order).all()
+        for gallery_item in gallery_items:
+            gallery_images.append({
+                "id": gallery_item.id,
+                "image_url": f"/uploads/content/images/{gallery_item.filename}",
+                "title": safe_string(gallery_item.title),
+                "description": safe_string(gallery_item.description),
+                "alt_text": safe_string(gallery_item.alt_text),
+                "sort_order": gallery_item.sort_order
+            })
+        
+        # Get downloads for this page
+        downloads = []
+        download_items = db.session.query(ContentDownload).filter(ContentDownload.content_page_id == page.id).order_by(ContentDownload.sort_order).all()
+        for download_item in download_items:
+            downloads.append({
+                "id": download_item.id,
+                "download_url": f"/uploads/content/downloads/{download_item.filename}",
+                "filename": safe_string(download_item.filename),
+                "title": safe_string(download_item.title),
+                "description": safe_string(download_item.description),
+                "alt_text": safe_string(download_item.alt_text),
+                "sort_order": download_item.sort_order
+            })
+        
+        # Get related links for this page
+        related_links = []
+        link_items = db.session.query(ContentLink).filter(ContentLink.content_page_id == page.id).order_by(ContentLink.sort_order).all()
+        for link_item in link_items:
+            related_links.append({
+                "id": link_item.id,
+                "title": safe_string(link_item.title),
+                "url": safe_string(link_item.url),
+                "new_tab": bool(link_item.new_tab),
+                "sort_order": link_item.sort_order
+            })
+        
         # Build the response with all fields the frontend expects
         result = {
             "id": page.id,
@@ -528,10 +573,10 @@ def get_content_page_by_slug(slug):
             "next_review_date": page.next_review_date,
             "updated_at": updated_at,
             
-            # Additional fields that the frontend might expect
-            "gallery_images": [],  # TODO: Add gallery support if needed
-            "downloads": [],       # TODO: Add downloads support if needed
-            "related_links": []    # TODO: Add related links support if needed
+            # Populated fields with actual data
+            "gallery_images": gallery_images,
+            "downloads": downloads,
+            "related_links": related_links
         }
         
         return jsonify(result)

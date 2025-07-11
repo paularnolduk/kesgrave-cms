@@ -6,12 +6,12 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (final safe version)');
+    console.log('🔧 Event modal fix script loaded (complete version)');
     
     let currentEventData = null;
     let escapeHandler = null;
     
-    // Wait for modal to appear - updated to detect event-modal-* classes
+    // Wait for modal to appear
     function waitForModal() {
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
@@ -44,28 +44,57 @@
         }
     }
     
-    // Get event data from homepage API
-    async function getEventFromHomepage(eventTitle) {
+    // Get combined event data from both APIs
+    async function getCombinedEventData(eventTitle) {
         try {
-            const response = await fetch('/api/homepage/events');
-            if (response.ok) {
-                const events = await response.json();
-                const event = events.find(e => 
+            // First get homepage events data (has images)
+            const homepageResponse = await fetch('/api/homepage/events');
+            let homepageEvent = null;
+            
+            if (homepageResponse.ok) {
+                const events = await homepageResponse.json();
+                homepageEvent = events.find(e => 
                     e.title.toLowerCase().includes(eventTitle.toLowerCase()) || 
                     eventTitle.toLowerCase().includes(e.title.toLowerCase())
                 );
-                console.log('✅ Event found in homepage data:', event);
-                return event;
+                console.log('✅ Homepage event data:', homepageEvent);
             }
+            
+            // Then get detailed event data from individual API
+            let detailedEvent = null;
+            if (homepageEvent && homepageEvent.id) {
+                try {
+                    const detailResponse = await fetch(`/api/events/${homepageEvent.id}`);
+                    if (detailResponse.ok) {
+                        detailedEvent = await detailResponse.json();
+                        console.log('✅ Detailed event data:', detailedEvent);
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Could not fetch detailed event data:', error);
+                }
+            }
+            
+            // Combine the data, prioritizing homepage data for images and detailed data for additional fields
+            const combinedData = {
+                ...homepageEvent,
+                ...detailedEvent,
+                // Ensure image comes from homepage data
+                image: homepageEvent?.image || detailedEvent?.image || '',
+                // Ensure featured status comes from homepage data
+                featured: homepageEvent?.featured || detailedEvent?.is_featured || false
+            };
+            
+            console.log('✅ Combined event data:', combinedData);
+            return combinedData;
+            
         } catch (error) {
-            console.warn('⚠️ Failed to fetch homepage events:', error);
+            console.warn('⚠️ Failed to fetch event data:', error);
+            return null;
         }
-        return null;
     }
     
     // Extract event title from modal content
     function extractEventTitle(modal) {
-        // Look for the title in various possible locations
         const selectors = [
             '.event-modal-title', 
             'h1', 'h2', 'h3', 
@@ -85,7 +114,7 @@
         return null;
     }
     
-    // Enhance modal with images and content
+    // Enhance modal with all improvements
     async function enhanceModal(modal) {
         if (!modal || modal.hasAttribute('data-enhanced')) {
             return;
@@ -94,7 +123,7 @@
         modal.setAttribute('data-enhanced', 'true');
         console.log('🎨 Enhancing event modal...');
         
-        // Add escape key handler (safe version)
+        // Add escape key handler
         escapeHandler = (e) => {
             if (e.key === 'Escape') {
                 console.log('🔑 Escape key pressed - using safe close');
@@ -104,16 +133,15 @@
         
         document.addEventListener('keydown', escapeHandler);
         
-        // Try to get event title and data
+        // Get event data
         const eventTitle = extractEventTitle(modal);
         if (eventTitle) {
-            const eventData = await getEventFromHomepage(eventTitle);
+            const eventData = await getCombinedEventData(eventTitle);
             
             if (eventData) {
                 currentEventData = eventData;
                 addEventImage(modal, eventData);
-                addEventTags(modal, eventData);
-                addContentSections(modal, eventData);
+                addRelatedSections(modal, eventData);
             } else {
                 console.warn('⚠️ Could not find event data for:', eventTitle);
             }
@@ -121,18 +149,18 @@
             console.warn('⚠️ Could not extract event title from modal');
         }
         
-        // Enhance close functionality (safe version)
+        // Enhance close functionality
         enhanceCloseButtons(modal);
     }
     
-    // Add event image to modal header (safe version)
+    // Add event image to modal header
     function addEventImage(modal, eventData) {
         if (!eventData.image) {
             console.log('ℹ️ No image available for event');
             return;
         }
         
-        // Find the modal header - try multiple selectors
+        // Find the modal header
         const headerSelectors = [
             '.event-modal-header',
             '[class*="modal-header"]',
@@ -158,7 +186,7 @@
         
         console.log('🖼️ Adding event image to modal header');
         
-        // Create image overlay instead of modifying existing styles
+        // Create image overlay
         const imageOverlay = document.createElement('div');
         imageOverlay.className = 'event-modal-image-enhancement';
         imageOverlay.style.cssText = `
@@ -183,7 +211,7 @@
         
         modalHeader.appendChild(imageOverlay);
         
-        // Add featured badge if applicable
+        // Add featured badge if applicable (positioned to not cover close button)
         if (eventData.featured) {
             const featuredBadge = document.createElement('div');
             featuredBadge.className = 'event-modal-featured-badge-enhancement';
@@ -209,82 +237,8 @@
         console.log('✅ Added event image and featured badge to modal');
     }
     
-    // Add event tags/categories (safe version)
-    function addEventTags(modal, eventData) {
-        // Find a good place to add tags
-        const headerSelectors = [
-            '.event-modal-header',
-            '[class*="modal-header"]',
-            '[class*="header"]'
-        ];
-        
-        let modalHeader = null;
-        for (const selector of headerSelectors) {
-            modalHeader = modal.querySelector(selector);
-            if (modalHeader) break;
-        }
-        
-        if (!modalHeader) {
-            console.warn('⚠️ Could not find modal header for tags');
-            return;
-        }
-        
-        // Check if tags already exist
-        if (modal.querySelector('.event-modal-tags-enhancement')) {
-            console.log('ℹ️ Tags enhancement already applied');
-            return;
-        }
-        
-        console.log('🏷️ Adding event category tags');
-        
-        const tagsContainer = document.createElement('div');
-        tagsContainer.className = 'event-modal-tags-enhancement';
-        tagsContainer.style.cssText = `
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            z-index: 10;
-        `;
-        
-        // Determine categories based on title
-        const categories = [];
-        const title = eventData.title.toLowerCase();
-        
-        if (title.includes('meeting') || title.includes('council')) {
-            categories.push({ name: 'COUNCIL', color: '#3498db', icon: '🏛️' });
-        } else if (title.includes('market') || title.includes('fair')) {
-            categories.push({ name: 'COMMUNITY', color: '#e74c3c', icon: '👥' });
-        } else {
-            categories.push({ name: 'EVENT', color: '#2ecc71', icon: '⭐' });
-        }
-        
-        categories.forEach(category => {
-            const tag = document.createElement('span');
-            tag.className = 'event-modal-tag-enhancement';
-            tag.innerHTML = `${category.icon} ${category.name}`;
-            tag.style.cssText = `
-                padding: 6px 12px;
-                border-radius: 16px;
-                font-size: 0.7rem;
-                font-weight: 600;
-                text-transform: uppercase;
-                color: white;
-                background-color: ${category.color};
-                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                border: 1px solid rgba(255,255,255,0.3);
-            `;
-            tagsContainer.appendChild(tag);
-        });
-        
-        modalHeader.appendChild(tagsContainer);
-        console.log('✅ Added category tags to modal');
-    }
-    
-    // Add additional content sections (safe version)
-    function addContentSections(modal, eventData) {
+    // Add related sections (avoiding duplicate data)
+    function addRelatedSections(modal, eventData) {
         // Find the modal body
         const bodySelectors = [
             '.event-modal-body',
@@ -310,63 +264,154 @@
             return;
         }
         
-        console.log('📋 Adding additional content sections');
+        console.log('📋 Adding related sections');
         
         // Create enhancement container
         const enhancementContainer = document.createElement('div');
         enhancementContainer.className = 'event-modal-enhancements';
         
         // Quick Actions Section
-        const quickActionsSection = document.createElement('div');
-        quickActionsSection.className = 'event-modal-quick-actions-enhancement';
-        quickActionsSection.innerHTML = `
+        const quickActionsSection = createQuickActionsSection(eventData);
+        
+        // Related Links Section (if available)
+        const relatedLinksSection = createRelatedLinksSection(eventData);
+        
+        // Related Files Section (if available)
+        const relatedFilesSection = createRelatedFilesSection(eventData);
+        
+        // Add sections to container
+        if (quickActionsSection) enhancementContainer.appendChild(quickActionsSection);
+        if (relatedLinksSection) enhancementContainer.appendChild(relatedLinksSection);
+        if (relatedFilesSection) enhancementContainer.appendChild(relatedFilesSection);
+        
+        // Insert at the end of modal body
+        modalBody.appendChild(enhancementContainer);
+        
+        console.log('✅ Added related sections to modal');
+    }
+    
+    // Create Quick Actions section
+    function createQuickActionsSection(eventData) {
+        const section = document.createElement('div');
+        section.className = 'event-modal-quick-actions-enhancement';
+        
+        const locationQuery = eventData.location_name || eventData.location || 'Kesgrave Community Centre';
+        const fullLocation = eventData.location_address ? 
+            `${eventData.location_name || eventData.location}, ${eventData.location_address}` : 
+            locationQuery;
+        
+        // Format date for calendar
+        let calendarDate = '';
+        if (eventData.start_date) {
+            const startDate = new Date(eventData.start_date);
+            const endDate = eventData.end_date ? new Date(eventData.end_date) : new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // Default 2 hours
+            calendarDate = `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
+        } else if (eventData.date) {
+            const eventDate = new Date(eventData.date);
+            const endDate = new Date(eventDate.getTime() + 2 * 60 * 60 * 1000);
+            calendarDate = `${eventDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
+        }
+        
+        section.innerHTML = `
             <h3 style="color: #2c5f2d; margin: 24px 0 16px 0; font-size: 1.1rem; font-weight: 600;">Quick Actions</h3>
             <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
-                <a href="https://maps.google.com/?q=${encodeURIComponent(eventData.location || 'Kesgrave Community Centre')}" 
+                <a href="https://maps.google.com/?q=${encodeURIComponent(fullLocation)}" 
                    target="_blank" 
                    style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background-color: #3498db; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: 500; transition: background-color 0.2s;">
                     📍 View on Map
                 </a>
-                <a href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventData.title)}&dates=${eventData.date ? eventData.date.replace(/-/g, '') : ''}T100000/${eventData.date ? eventData.date.replace(/-/g, '') : ''}T160000&details=${encodeURIComponent(eventData.description || '')}&location=${encodeURIComponent(eventData.location || '')}" 
+                <a href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventData.title)}&dates=${calendarDate}&details=${encodeURIComponent(eventData.description || eventData.long_description || '')}&location=${encodeURIComponent(fullLocation)}" 
                    target="_blank"
                    style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background-color: #2ecc71; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: 500; transition: background-color 0.2s;">
                     📅 Add to Calendar
                 </a>
-                <button onclick="if(navigator.share){navigator.share({title: '${eventData.title}', text: '${eventData.description || ''}', url: window.location.href})}else{navigator.clipboard.writeText(window.location.href).then(() => alert('Link copied to clipboard!'))}" 
+                <button onclick="if(navigator.share){navigator.share({title: '${eventData.title}', text: '${(eventData.description || '').replace(/'/g, "\\'")}', url: window.location.href})}else{navigator.clipboard.writeText(window.location.href).then(() => alert('Link copied to clipboard!'))}" 
                         style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background-color: #9b59b6; color: white; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: background-color 0.2s;">
                     🔗 Share Event
                 </button>
             </div>
         `;
         
-        // Event Details Enhancement
-        const eventDetailsSection = document.createElement('div');
-        eventDetailsSection.className = 'event-modal-enhanced-details';
-        eventDetailsSection.innerHTML = `
-            <h3 style="color: #2c5f2d; margin: 24px 0 16px 0; font-size: 1.1rem; font-weight: 600;">Event Information</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
-                <div style="padding: 12px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
-                    <strong style="color: #495057; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Date & Time</strong>
-                    <p style="margin: 4px 0 0 0; color: #2c5f2d; font-weight: 500;">${eventData.date ? new Date(eventData.date).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Date TBA'}</p>
-                </div>
-                <div style="padding: 12px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
-                    <strong style="color: #495057; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Location</strong>
-                    <p style="margin: 4px 0 0 0; color: #2c5f2d; font-weight: 500;">${eventData.location || 'Location TBA'}</p>
-                </div>
+        return section;
+    }
+    
+    // Create Related Links section
+    function createRelatedLinksSection(eventData) {
+        const links = [];
+        
+        // Add website URL if available
+        if (eventData.website_url && eventData.website_url.trim()) {
+            links.push({
+                title: 'Event Website',
+                url: eventData.website_url,
+                icon: '🌐'
+            });
+        }
+        
+        // Add booking URL if available
+        if (eventData.booking_url && eventData.booking_url.trim()) {
+            links.push({
+                title: 'Book Tickets',
+                url: eventData.booking_url,
+                icon: '🎫'
+            });
+        }
+        
+        // If no links, don't create the section
+        if (links.length === 0) {
+            return null;
+        }
+        
+        const section = document.createElement('div');
+        section.className = 'event-modal-related-links-enhancement';
+        
+        const linksHtml = links.map(link => `
+            <a href="${link.url}" 
+               target="_blank" 
+               rel="noopener noreferrer"
+               style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; text-decoration: none; color: #2c5f2d; font-weight: 500; transition: all 0.2s;">
+                <span style="font-size: 1.2rem;">${link.icon}</span>
+                <span>${link.title}</span>
+                <span style="margin-left: auto; color: #6c757d;">↗</span>
+            </a>
+        `).join('');
+        
+        section.innerHTML = `
+            <h3 style="color: #2c5f2d; margin: 24px 0 16px 0; font-size: 1.1rem; font-weight: 600;">Related Links</h3>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                ${linksHtml}
             </div>
         `;
         
-        // Add sections to container
-        enhancementContainer.appendChild(eventDetailsSection);
-        enhancementContainer.appendChild(quickActionsSection);
-        
-        // Insert at the end of modal body
-        modalBody.appendChild(enhancementContainer);
-        
-        console.log('✅ Added quick actions and enhanced details sections');
+        return section;
     }
     
-    // Safe close modal function - doesn't interfere with React
+    // Create Related Files section
+    function createRelatedFilesSection(eventData) {
+        // For now, this is a placeholder as the API doesn't seem to have file attachments
+        // This can be expanded when file attachment functionality is added to the CMS
+        
+        // Check if there are any file-related fields in the event data
+        const hasFiles = eventData.attachments || eventData.files || eventData.documents;
+        
+        if (!hasFiles) {
+            return null;
+        }
+        
+        const section = document.createElement('div');
+        section.className = 'event-modal-related-files-enhancement';
+        
+        section.innerHTML = `
+            <h3 style="color: #2c5f2d; margin: 24px 0 16px 0; font-size: 1.1rem; font-weight: 600;">Related Files</h3>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                <p style="color: #6c757d; font-style: italic;">File attachments will be displayed here when available.</p>
+            </div>
+        `;
+        
+        return section;
+    }
+    
+    // Safe close modal function
     function safeCloseModal(modal) {
         console.log('🚪 Safely closing modal');
         
@@ -376,7 +421,7 @@
             escapeHandler = null;
         }
         
-        // Try to find and click the existing close button instead of removing DOM elements
+        // Try to find and click the existing close button
         const closeButton = modal.querySelector('.event-modal-close, [aria-label*="Close"], [aria-label*="close"], button[class*="close"]');
         if (closeButton) {
             console.log('✅ Found close button, clicking it');
@@ -386,7 +431,7 @@
         }
     }
     
-    // Enhance close buttons (safe version)
+    // Enhance close buttons
     function enhanceCloseButtons(modal) {
         const closeButtons = modal.querySelectorAll('.event-modal-close, [aria-label*="Close"], [aria-label*="close"], button[class*="close"]');
         
@@ -401,7 +446,7 @@
             });
         });
         
-        // Add backdrop click to close (safe version)
+        // Add backdrop click to close
         const backdrop = modal.querySelector('.event-modal-backdrop');
         if (backdrop) {
             backdrop.addEventListener('click', (e) => {

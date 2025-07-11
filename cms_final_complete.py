@@ -173,15 +173,27 @@ def get_meetings():
 def get_events():
     try:
         init_models()
-        events = db.session.query(Event).all()
+        # Get current datetime for filtering
+        now = datetime.now()
+        
+        # Get all future events
+        future_events = db.session.query(Event).filter(Event.start_date >= now).all()
+        
+        # Sort events: featured first, then by date
+        sorted_events = sorted(future_events, key=lambda e: (not getattr(e, 'featured', False), e.start_date))
+        
+        # Limit to 6 events
+        limited_events = sorted_events[:6]
+        
         return jsonify([{
             "id": e.id,
             "title": safe_string(e.title),
             "description": safe_string(e.description),
             "date": e.start_date,
             "location": safe_string(e.location_name),
-            "image": f"/uploads/events/{safe_string(e.image_filename)}" if e.image_filename else ""
-        } for e in events])
+            "image": f"/uploads/events/{safe_string(e.image_filename)}" if e.image_filename else "",
+            "featured": bool(getattr(e, 'featured', False))  # ✅ ADDED FEATURED FIELD
+        } for e in limited_events])
     except Exception as e:
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 

@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from sqlalchemy.ext.automap import automap_base
 from urllib.parse import unquote
+from datetime import datetime
 
 app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
@@ -101,10 +102,6 @@ def get_homepage_slides():
     except Exception as e:
         return jsonify({"error": f"Failed to load slides: {str(e)}"}), 500
 
-@app.route("/slider-fix.js")
-def serve_slider_fix():
-    return send_from_directory(basedir, "slider-fix.js")
-
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
     try:
@@ -112,9 +109,10 @@ def get_quick_links():
         links = db.session.query(QuickLink).all()
         return jsonify([{
             "id": l.id,
-            "label": safe_string(l.title),
-            "icon": safe_string(safe_getattr(l, 'icon', '')),
+            "title": safe_string(l.title),
+            "description": safe_string(l.description),
             "url": safe_string(l.button_url),
+            "button_text": safe_string(l.button_name),
             "sort_order": l.sort_order,
             "is_active": l.is_active
         } for l in links])
@@ -125,16 +123,32 @@ def get_quick_links():
 def get_meetings():
     try:
         init_models()
-        # Join meetings with meeting_type to get the type name
-        meetings = db.session.query(Meeting, MeetingType).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).all()
+        # Get current date for filtering
+        today = datetime.now().date()
         
-        return jsonify([{
-            "id": m.id,
-            "title": safe_string(m.title),
-            "date": m.meeting_date,
-            "document_url": safe_string(m.agenda_filename or m.minutes_filename or m.draft_minutes_filename),
-            "type": safe_string(mt.name)  # Add the missing type field
-        } for m, mt in meetings])
+        # Get all meeting types
+        meeting_types = db.session.query(MeetingType).filter(MeetingType.is_active == True).all()
+        
+        result = []
+        for mt in meeting_types:
+            # Get the next upcoming meeting for this type
+            next_meeting = db.session.query(Meeting).filter(
+                Meeting.meeting_type_id == mt.id,
+                Meeting.meeting_date >= today
+            ).order_by(Meeting.meeting_date.asc()).first()
+            
+            if next_meeting:
+                result.append({
+                    "id": next_meeting.id,
+                    "title": safe_string(next_meeting.title),
+                    "date": next_meeting.meeting_date,
+                    "time": safe_string(str(next_meeting.meeting_time)) if next_meeting.meeting_time else "",
+                    "location": safe_string(next_meeting.location),
+                    "document_url": safe_string(next_meeting.agenda_filename or next_meeting.minutes_filename or next_meeting.draft_minutes_filename),
+                    "type": safe_string(mt.name)
+                })
+        
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
 
@@ -142,14 +156,39 @@ def get_meetings():
 def get_events():
     try:
         init_models()
-        events = db.session.query(Event).all()
-        return jsonify([{
-            "id": e.id,
-            "title": safe_string(e.title),
-            "description": safe_string(e.description),
-            "date": e.start_date,
-            "location": safe_string(e.location_name)
-        } for e in events])
+        # Get current date for filtering
+        today = datetime.now().date()
+        
+        # Get upcoming events (next 6)
+        events = db.session.query(Event).filter(
+            Event.start_date >= today,
+            Event.is_active == True
+        ).order_by(Event.start_date.asc()).limit(6).all()
+        
+        result = []
+        for e in events:
+            # Get event categories
+            categories = []
+            if hasattr(e, 'category_id') and e.category_id:
+                category = db.session.query(EventCategory).filter(EventCategory.id == e.category_id).first()
+                if category:
+                    categories.append({
+                        "name": safe_string(category.name),
+                        "color": safe_string(category.color)
+                    })
+            
+            result.append({
+                "id": e.id,
+                "title": safe_string(e.title),
+                "description": safe_string(e.description),
+                "date": e.start_date,
+                "time": safe_string(str(e.start_time)) if hasattr(e, 'start_time') and e.start_time else "",
+                "location": safe_string(e.location_name),
+                "featured_image": f"/uploads/events/{safe_string(e.image)}" if hasattr(e, 'image') and e.image else "",
+                "categories": categories
+            })
+        
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 
@@ -281,7 +320,7 @@ def get_meetings_by_type(type_name):
         decoded_type_name = unquote(type_name)
         
         # Join meetings with meeting_type to filter by type name
-        meetings = db.session.query(Meeting).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).filter(MeetingType.name == decoded_type_name).all()
+        meetings = db.session.query(Meeting).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).filter(MeetingType.name == decoded_type_name).order_by(Meeting.meeting_date.desc()).all()
         
         return jsonify([{
             "id": m.id,
@@ -379,12 +418,17 @@ def login():
 def serve_assets(filename):
     return send_from_directory(os.path.join(app.static_folder), filename)
 
-# NEW: Add route to serve uploaded images
+# Route to serve uploaded images
 @app.route("/uploads/<path:filename>")
 def serve_uploads(filename):
     """Serve uploaded files from the uploads directory"""
     uploads_dir = os.path.join(basedir, "uploads")
     return send_from_directory(uploads_dir, filename)
+
+# Route to serve slider fix script
+@app.route("/slider-fix.js")
+def serve_slider_fix():
+    return send_from_directory(basedir, "slider-fix.js")
 
 @app.route("/")
 def serve_frontend():

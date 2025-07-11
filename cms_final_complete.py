@@ -496,34 +496,73 @@ def get_meetings_by_type(type_name):
         # Join meetings with meeting_type to filter by type name
         meetings = db.session.query(Meeting).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).filter(MeetingType.name == decoded_type_name).order_by(Meeting.meeting_date.desc()).all()
         
-        return jsonify([{
-            "id": m.id,
-            "title": safe_string(m.title),
-            "date": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,
-            "time": str(m.meeting_time)[:5] if m.meeting_time else "",  # HH:MM format
-            "location": safe_string(m.location),
-            "agenda_filename": safe_string(m.agenda_filename),
-            "minutes_filename": safe_string(m.minutes_filename),
-            "draft_minutes_filename": safe_string(m.draft_minutes_filename),
-            "schedule_applications_filename": safe_string(m.schedule_applications_filename),
-            "audio_filename": safe_string(m.audio_filename),
-            "status": safe_string(m.status),
-            "is_published": m.is_published,
-            "notes": safe_string(m.notes),
-            "agenda_title": safe_string(m.agenda_title),
-            "agenda_description": safe_string(m.agenda_description),
-            "minutes_title": safe_string(m.minutes_title),
-            "minutes_description": safe_string(m.minutes_description),
-            "draft_minutes_title": safe_string(m.draft_minutes_title),
-            "draft_minutes_description": safe_string(m.draft_minutes_description),
-            "schedule_applications_title": safe_string(m.schedule_applications_title),
-            "schedule_applications_description": safe_string(m.schedule_applications_description),
-            "audio_title": safe_string(m.audio_title),
-            "audio_description": safe_string(m.audio_description),
-            "summary_url": safe_string(m.summary_url)
-        } for m in meetings])
+        # Get current date for categorization
+        today = date.today()
+        
+        # Categorize meetings
+        upcoming_meetings = []
+        recent_meetings = []
+        historic_meetings = []
+        
+        for m in meetings:
+            meeting_data = {
+                "id": m.id,
+                "title": safe_string(m.title),
+                "date": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,
+                "time": str(m.meeting_time)[:5] if m.meeting_time else "",
+                "location": safe_string(m.location),
+                "agenda_filename": safe_string(m.agenda_filename),
+                "minutes_filename": safe_string(m.minutes_filename),
+                "draft_minutes_filename": safe_string(m.draft_minutes_filename),
+                "schedule_applications_filename": safe_string(m.schedule_applications_filename),
+                "audio_filename": safe_string(m.audio_filename),
+                "status": safe_string(m.status),
+                "is_published": m.is_published,
+                "notes": safe_string(m.notes),
+                "agenda_title": safe_string(m.agenda_title),
+                "agenda_description": safe_string(m.agenda_description),
+                "minutes_title": safe_string(m.minutes_title),
+                "minutes_description": safe_string(m.minutes_description),
+                "draft_minutes_title": safe_string(m.draft_minutes_title),
+                "draft_minutes_description": safe_string(m.draft_minutes_description),
+                "schedule_applications_title": safe_string(m.schedule_applications_title),
+                "schedule_applications_description": safe_string(m.schedule_applications_description),
+                "audio_title": safe_string(m.audio_title),
+                "audio_description": safe_string(m.audio_description),
+                "summary_url": safe_string(m.summary_url),
+                # Add file URLs for downloads
+                "agenda_url": f"/uploads/meetings/{m.agenda_filename}" if m.agenda_filename else None,
+                "minutes_url": f"/uploads/meetings/{m.minutes_filename}" if m.minutes_filename else None,
+                "draft_minutes_url": f"/uploads/meetings/{m.draft_minutes_filename}" if m.draft_minutes_filename else None,
+                "schedule_applications_url": f"/uploads/meetings/{m.schedule_applications_filename}" if m.schedule_applications_filename else None,
+                "audio_url": f"/uploads/meetings/{m.audio_filename}" if m.audio_filename else None
+            }
+            
+            # Categorize based on meeting date
+            if m.meeting_date:
+                if m.meeting_date >= today:
+                    upcoming_meetings.append(meeting_data)
+                else:
+                    historic_meetings.append(meeting_data)
+        
+        # Recent meetings are the last 6 past meetings
+        recent_meetings = historic_meetings[:6] if historic_meetings else []
+        
+        # Sort upcoming meetings by date (earliest first)
+        upcoming_meetings.sort(key=lambda x: x['date'] if x['date'] else '')
+        
+        # Return categorized data
+        return jsonify({
+            "upcoming": upcoming_meetings,
+            "recent": recent_meetings,
+            "historic": historic_meetings,
+            "total_count": len(meetings)
+        })
+        
     except Exception as e:
         return jsonify({"error": f"Failed to load meetings for type '{type_name}': {str(e)}"}), 500
+
+
 
 @app.route('/api/meetings/<int:meeting_id>')
 def get_meeting_detail(meeting_id):

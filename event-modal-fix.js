@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (complete version)');
+    console.log('🔧 Event modal fix script loaded (timing fix version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -24,7 +24,11 @@
                             console.log('✅ Event modal detected, enhancing...');
                             const modal = node.classList?.contains('event-modal-backdrop') ? node : 
                                          node.querySelector('.event-modal-backdrop, .event-modal-container');
-                            enhanceModal(modal);
+                            
+                            // Add a small delay to ensure modal content is fully rendered
+                            setTimeout(() => {
+                                enhanceModal(modal);
+                            }, 100);
                         }
                     }
                 });
@@ -40,13 +44,17 @@
         const existingModal = document.querySelector('.event-modal-backdrop, .event-modal-container');
         if (existingModal) {
             console.log('✅ Existing event modal found, enhancing...');
-            enhanceModal(existingModal);
+            setTimeout(() => {
+                enhanceModal(existingModal);
+            }, 100);
         }
     }
     
     // Get combined event data from both APIs
     async function getCombinedEventData(eventTitle) {
         try {
+            console.log('🔍 Fetching data for event:', eventTitle);
+            
             // First get homepage events data (has images)
             const homepageResponse = await fetch('/api/homepage/events');
             let homepageEvent = null;
@@ -93,8 +101,10 @@
         }
     }
     
-    // Extract event title from modal content
+    // Extract event title from modal content with better debugging
     function extractEventTitle(modal) {
+        console.log('🔍 Attempting to extract event title...');
+        
         const selectors = [
             '.event-modal-title', 
             'h1', 'h2', 'h3', 
@@ -103,20 +113,28 @@
         ];
         
         for (const selector of selectors) {
+            console.log(`🔍 Trying selector: ${selector}`);
             const titleElement = modal.querySelector(selector);
-            if (titleElement && titleElement.textContent.trim()) {
+            if (titleElement) {
                 const title = titleElement.textContent.trim();
-                console.log('🔍 Found event title:', title);
-                return title;
+                console.log(`🔍 Found element with selector "${selector}":`, title);
+                if (title) {
+                    console.log('✅ Successfully extracted title:', title);
+                    return title;
+                }
+            } else {
+                console.log(`❌ No element found for selector: ${selector}`);
             }
         }
         
+        console.warn('⚠️ Could not extract event title from modal');
         return null;
     }
     
     // Enhance modal with all improvements
     async function enhanceModal(modal) {
         if (!modal || modal.hasAttribute('data-enhanced')) {
+            console.log('ℹ️ Modal already enhanced or not found');
             return;
         }
         
@@ -133,32 +151,43 @@
         
         document.addEventListener('keydown', escapeHandler);
         
-        // Get event data
-        const eventTitle = extractEventTitle(modal);
-        if (eventTitle) {
-            const eventData = await getCombinedEventData(eventTitle);
-            
-            if (eventData) {
-                currentEventData = eventData;
-                addEventImage(modal, eventData);
-                addRelatedSections(modal, eventData);
+        // Get event data with better error handling
+        try {
+            const eventTitle = extractEventTitle(modal);
+            if (eventTitle) {
+                console.log('🎯 Extracted title, fetching event data...');
+                const eventData = await getCombinedEventData(eventTitle);
+                
+                if (eventData) {
+                    currentEventData = eventData;
+                    console.log('🖼️ Adding image to modal...');
+                    addEventImage(modal, eventData);
+                    console.log('📋 Adding related sections...');
+                    addRelatedSections(modal, eventData);
+                } else {
+                    console.warn('⚠️ Could not find event data for:', eventTitle);
+                }
             } else {
-                console.warn('⚠️ Could not find event data for:', eventTitle);
+                console.warn('⚠️ Could not extract event title from modal');
             }
-        } else {
-            console.warn('⚠️ Could not extract event title from modal');
+        } catch (error) {
+            console.error('❌ Error enhancing modal:', error);
         }
         
         // Enhance close functionality
         enhanceCloseButtons(modal);
     }
     
-    // Add event image to modal header
+    // Add event image to modal header with better debugging
     function addEventImage(modal, eventData) {
+        console.log('🖼️ addEventImage called with:', eventData);
+        
         if (!eventData.image) {
-            console.log('ℹ️ No image available for event');
+            console.log('ℹ️ No image available for event, image field:', eventData.image);
             return;
         }
+        
+        console.log('✅ Image available:', eventData.image);
         
         // Find the modal header
         const headerSelectors = [
@@ -170,7 +199,10 @@
         let modalHeader = null;
         for (const selector of headerSelectors) {
             modalHeader = modal.querySelector(selector);
-            if (modalHeader) break;
+            if (modalHeader) {
+                console.log(`✅ Found modal header with selector: ${selector}`);
+                break;
+            }
         }
         
         if (!modalHeader) {
@@ -189,13 +221,18 @@
         // Create image overlay
         const imageOverlay = document.createElement('div');
         imageOverlay.className = 'event-modal-image-enhancement';
+        
+        // Construct full image URL
+        const imageUrl = eventData.image.startsWith('http') ? eventData.image : `https://kesgrave-cms.onrender.com${eventData.image}`;
+        console.log('🔗 Full image URL:', imageUrl);
+        
         imageOverlay.style.cssText = `
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('${eventData.image}');
+            background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('${imageUrl}');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -232,13 +269,16 @@
                 border: 2px solid #e67e22;
             `;
             modalHeader.appendChild(featuredBadge);
+            console.log('✅ Added featured badge');
         }
         
-        console.log('✅ Added event image and featured badge to modal');
+        console.log('✅ Successfully added event image and featured badge to modal');
     }
     
-    // Add related sections (avoiding duplicate data)
+    // Add related sections (simplified for debugging)
     function addRelatedSections(modal, eventData) {
+        console.log('📋 addRelatedSections called');
+        
         // Find the modal body
         const bodySelectors = [
             '.event-modal-body',
@@ -250,7 +290,10 @@
         let modalBody = null;
         for (const selector of bodySelectors) {
             modalBody = modal.querySelector(selector);
-            if (modalBody) break;
+            if (modalBody) {
+                console.log(`✅ Found modal body with selector: ${selector}`);
+                break;
+            }
         }
         
         if (!modalBody) {
@@ -276,18 +319,20 @@
         // Related Links Section (if available)
         const relatedLinksSection = createRelatedLinksSection(eventData);
         
-        // Related Files Section (if available)
-        const relatedFilesSection = createRelatedFilesSection(eventData);
-        
         // Add sections to container
-        if (quickActionsSection) enhancementContainer.appendChild(quickActionsSection);
-        if (relatedLinksSection) enhancementContainer.appendChild(relatedLinksSection);
-        if (relatedFilesSection) enhancementContainer.appendChild(relatedFilesSection);
+        if (quickActionsSection) {
+            enhancementContainer.appendChild(quickActionsSection);
+            console.log('✅ Added quick actions section');
+        }
+        if (relatedLinksSection) {
+            enhancementContainer.appendChild(relatedLinksSection);
+            console.log('✅ Added related links section');
+        }
         
         // Insert at the end of modal body
         modalBody.appendChild(enhancementContainer);
         
-        console.log('✅ Added related sections to modal');
+        console.log('✅ Successfully added related sections to modal');
     }
     
     // Create Quick Actions section
@@ -304,7 +349,7 @@
         let calendarDate = '';
         if (eventData.start_date) {
             const startDate = new Date(eventData.start_date);
-            const endDate = eventData.end_date ? new Date(eventData.end_date) : new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // Default 2 hours
+            const endDate = eventData.end_date ? new Date(eventData.end_date) : new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
             calendarDate = `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
         } else if (eventData.date) {
             const eventDate = new Date(eventData.date);
@@ -386,31 +431,6 @@
         return section;
     }
     
-    // Create Related Files section
-    function createRelatedFilesSection(eventData) {
-        // For now, this is a placeholder as the API doesn't seem to have file attachments
-        // This can be expanded when file attachment functionality is added to the CMS
-        
-        // Check if there are any file-related fields in the event data
-        const hasFiles = eventData.attachments || eventData.files || eventData.documents;
-        
-        if (!hasFiles) {
-            return null;
-        }
-        
-        const section = document.createElement('div');
-        section.className = 'event-modal-related-files-enhancement';
-        
-        section.innerHTML = `
-            <h3 style="color: #2c5f2d; margin: 24px 0 16px 0; font-size: 1.1rem; font-weight: 600;">Related Files</h3>
-            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
-                <p style="color: #6c757d; font-style: italic;">File attachments will be displayed here when available.</p>
-            </div>
-        `;
-        
-        return section;
-    }
-    
     // Safe close modal function
     function safeCloseModal(modal) {
         console.log('🚪 Safely closing modal');
@@ -456,7 +476,7 @@
             });
         }
         
-        console.log('✅ Enhanced close functionality (safe version)');
+        console.log('✅ Enhanced close functionality');
     }
     
     // Initialize when DOM is ready
@@ -467,3 +487,4 @@
     }
     
 })();
+

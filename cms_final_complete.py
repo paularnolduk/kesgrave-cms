@@ -493,6 +493,11 @@ def get_meetings_by_type(type_name):
         # URL decode the type name
         decoded_type_name = unquote(type_name)
         
+        # Get pagination parameters from request
+        from flask import request
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        
         # Join meetings with meeting_type to filter by type name
         meetings = db.session.query(Meeting).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).filter(MeetingType.name == decoded_type_name).order_by(Meeting.meeting_date.desc()).all()
         
@@ -505,39 +510,64 @@ def get_meetings_by_type(type_name):
         historic_meetings = []
         all_meetings = []  # Flat array for backward compatibility
         
-        for m in meetings:
-            meeting_data = {
+        def format_date_with_comma(meeting_date):
+            """Format date as 'Monday, 30 June 2025'"""
+            if not meeting_date:
+                return None
+            return meeting_date.strftime('%A, %d %B %Y')
+        
+        def create_meeting_data(m):
+            """Create meeting data object with file availability flags"""
+            return {
                 "id": m.id,
                 "title": safe_string(m.title),
                 "date": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,
+                "date_formatted": format_date_with_comma(m.meeting_date),  # New formatted date
                 "time": str(m.meeting_time)[:5] if m.meeting_time else "",
                 "location": safe_string(m.location),
-                "agenda_filename": safe_string(m.agenda_filename),
-                "minutes_filename": safe_string(m.minutes_filename),
-                "draft_minutes_filename": safe_string(m.draft_minutes_filename),
-                "schedule_applications_filename": safe_string(m.schedule_applications_filename),
-                "audio_filename": safe_string(m.audio_filename),
                 "status": safe_string(m.status),
                 "is_published": m.is_published,
                 "notes": safe_string(m.notes),
+                
+                # File fields with URLs
+                "agenda_filename": safe_string(m.agenda_filename),
                 "agenda_title": safe_string(m.agenda_title),
                 "agenda_description": safe_string(m.agenda_description),
+                "agenda_url": f"/uploads/meetings/{m.agenda_filename}" if m.agenda_filename else None,
+                
+                "minutes_filename": safe_string(m.minutes_filename),
                 "minutes_title": safe_string(m.minutes_title),
                 "minutes_description": safe_string(m.minutes_description),
+                "minutes_url": f"/uploads/meetings/{m.minutes_filename}" if m.minutes_filename else None,
+                
+                "draft_minutes_filename": safe_string(m.draft_minutes_filename),
                 "draft_minutes_title": safe_string(m.draft_minutes_title),
                 "draft_minutes_description": safe_string(m.draft_minutes_description),
+                "draft_minutes_url": f"/uploads/meetings/{m.draft_minutes_filename}" if m.draft_minutes_filename else None,
+                
+                "schedule_applications_filename": safe_string(m.schedule_applications_filename),
                 "schedule_applications_title": safe_string(m.schedule_applications_title),
                 "schedule_applications_description": safe_string(m.schedule_applications_description),
+                "schedule_applications_url": f"/uploads/meetings/{m.schedule_applications_filename}" if m.schedule_applications_filename else None,
+                
+                "audio_filename": safe_string(m.audio_filename),
                 "audio_title": safe_string(m.audio_title),
                 "audio_description": safe_string(m.audio_description),
+                "audio_url": f"/uploads/meetings/{m.audio_filename}" if m.audio_filename else None,
+                
                 "summary_url": safe_string(m.summary_url),
-                # Add file URLs for downloads
-                "agenda_url": f"/uploads/meetings/{m.agenda_filename}" if m.agenda_filename else None,
-                "minutes_url": f"/uploads/meetings/{m.minutes_filename}" if m.minutes_filename else None,
-                "draft_minutes_url": f"/uploads/meetings/{m.draft_minutes_filename}" if m.draft_minutes_filename else None,
-                "schedule_applications_url": f"/uploads/meetings/{m.schedule_applications_filename}" if m.schedule_applications_filename else None,
-                "audio_url": f"/uploads/meetings/{m.audio_filename}" if m.audio_filename else None
+                
+                # Boolean flags for file availability (NEW)
+                "has_agenda": bool(m.agenda_filename and m.agenda_filename.strip()),
+                "has_minutes": bool(m.minutes_filename and m.minutes_filename.strip()),
+                "has_draft_minutes": bool(m.draft_minutes_filename and m.draft_minutes_filename.strip()),
+                "has_schedule_applications": bool(m.schedule_applications_filename and m.schedule_applications_filename.strip()),
+                "has_audio": bool(m.audio_filename and m.audio_filename.strip()),
+                "has_summary": bool(m.summary_url and m.summary_url.strip())
             }
+        
+        for m in meetings:
+            meeting_data = create_meeting_data(m)
             
             # Add to flat array for backward compatibility
             all_meetings.append(meeting_data)
@@ -555,21 +585,38 @@ def get_meetings_by_type(type_name):
         # Sort upcoming meetings by date (earliest first)
         upcoming_meetings.sort(key=lambda x: x['date'] if x['date'] else '')
         
-        # Return backward compatible format
-        # Frontend expects flat array, but we also provide categorized data
+        # Pagination for historic meetings
+        total_historic = len(historic_meetings)
+        start_index = (page - 1) * per_page
+        end_index = start_index + per_page
+        paginated_historic = historic_meetings[start_index:end_index]
+        
+        has_more_historic = end_index < total_historic
+        
+        # Return enhanced backward compatible format
         return jsonify({
             # OLD FORMAT (for current frontend compatibility)
             "meetings": all_meetings,
             
-            # NEW FORMAT (for future use)
+            # NEW FORMAT (enhanced with pagination and flags)
             "upcoming": upcoming_meetings,
             "recent": recent_meetings,
-            "historic": historic_meetings,
-            "total_count": len(meetings),
+            "historic": paginated_historic,  # Paginated historic meetings
+            
+            # PAGINATION INFO
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total_historic": total_historic,
+                "has_more": has_more_historic,
+                "showing": len(paginated_historic),
+                "total_pages": (total_historic + per_page - 1) // per_page
+            },
             
             # METADATA
-            "format_version": "v2_compatible",
-            "categorized": True
+            "total_count": len(meetings),
+            "format_version": "v3_enhanced",
+            "features": ["file_flags", "pagination", "formatted_dates"]
         })
         
     except Exception as e:

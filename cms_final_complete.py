@@ -207,14 +207,39 @@ def get_events():
 def get_councillors():
     try:
         init_models()
-        councillors = db.session.query(Councillor).all()
-        return jsonify([{
-            "id": c.id,
-            "name": safe_string(c.name),
-            "role": safe_string(c.title),
-            "phone": safe_string(c.phone),
-            "email": safe_string(c.email)
-        } for c in councillors])
+        councillors = db.session.query(Councillor).filter(Councillor.is_published == True).all()
+        
+        result = []
+        for c in councillors:
+            # Get councillor tags for this councillor
+            councillor_tags = db.session.query(Tag).join(
+                CouncillorTag, Tag.id == CouncillorTag.tag_id
+            ).filter(CouncillorTag.councillor_id == c.id).all()
+            
+            # Build image URL
+            image_url = ""
+            if c.image_filename:
+                image_url = f"/uploads/councillors/{c.image_filename}"
+            
+            result.append({
+                "id": c.id,
+                "name": safe_string(c.name),
+                "title": safe_string(c.title),
+                "role": safe_string(c.title),
+                "phone": safe_string(c.phone),
+                "email": safe_string(c.email),
+                "intro": safe_string(safe_getattr(c, 'intro', '')),
+                "bio": safe_string(safe_getattr(c, 'bio', '')),
+                "image_url": image_url,
+                "tags": [{
+                    "id": tag.id,
+                    "name": safe_string(tag.name),
+                    "color": safe_string(tag.color),
+                    "description": safe_string(tag.description)
+                } for tag in councillor_tags]
+            })
+        
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
 
@@ -230,14 +255,25 @@ def get_councillor_detail(councillor_id):
         # Get councillor tags
         councillor_tags = db.session.query(Tag).join(CouncillorTag, Tag.id == CouncillorTag.tag_id).filter(CouncillorTag.councillor_id == councillor_id).all()
         
+        # Build image URL
+        image_url = ""
+        if councillor.image_filename:
+            image_url = f"/uploads/councillors/{councillor.image_filename}"
+        
         return jsonify({
             "id": councillor.id,
             "name": safe_string(councillor.name),
+            "title": safe_string(councillor.title),
             "role": safe_string(councillor.title),
             "phone": safe_string(councillor.phone),
             "email": safe_string(councillor.email),
             "bio": safe_string(safe_getattr(councillor, 'bio', '')),
-            "image": safe_string(safe_getattr(councillor, 'image', '')),
+            "intro": safe_string(safe_getattr(councillor, 'intro', '')),
+            "address": safe_string(safe_getattr(councillor, 'address', '')),
+            "qualifications": safe_string(safe_getattr(councillor, 'qualifications', '')),
+            "image": image_url,
+            "image_url": image_url,
+            "social_links": safe_string(safe_getattr(councillor, 'social_links', '')),
             "tags": [{
                 "id": tag.id,
                 "name": safe_string(tag.name),

@@ -156,39 +156,15 @@ def get_meetings():
 def get_events():
     try:
         init_models()
-        # Get current date for filtering
-        today = datetime.now().date()
-        
-        # Get upcoming events (next 6)
-        events = db.session.query(Event).filter(
-            Event.start_date >= today,
-            Event.is_active == True
-        ).order_by(Event.start_date.asc()).limit(6).all()
-        
-        result = []
-        for e in events:
-            # Get event categories
-            categories = []
-            if hasattr(e, 'category_id') and e.category_id:
-                category = db.session.query(EventCategory).filter(EventCategory.id == e.category_id).first()
-                if category:
-                    categories.append({
-                        "name": safe_string(category.name),
-                        "color": safe_string(category.color)
-                    })
-            
-            result.append({
-                "id": e.id,
-                "title": safe_string(e.title),
-                "description": safe_string(e.description),
-                "date": e.start_date,
-                "time": safe_string(str(e.start_time)) if hasattr(e, 'start_time') and e.start_time else "",
-                "location": safe_string(e.location_name),
-                "featured_image": f"/uploads/events/{safe_string(e.image)}" if hasattr(e, 'image') and e.image else "",
-                "categories": categories
-            })
-        
-        return jsonify(result)
+        events = db.session.query(Event).all()
+        return jsonify([{
+            "id": e.id,
+            "title": safe_string(e.title),
+            "description": safe_string(e.description),
+            "date": e.start_date,
+            "location": safe_string(e.location_name),
+            "image": f"/uploads/events/{safe_string(e.image_filename)}" if e.image_filename else ""
+        } for e in events])
     except Exception as e:
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 

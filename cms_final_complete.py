@@ -560,16 +560,29 @@ def get_meetings_by_type(type_name):
                     "description": safe_string(m.audio_description) or ""
                 }
             
+            
+            summary = None
+            if m.summary_url and m.summary_url.strip():
+                summary = {
+                    "file_url": safe_string(m.summary_url),
+                    "title": "Meeting Summary",
+                    "description": ""
+                }
+            
             return {
                 "id": m.id,
                 "title": safe_string(m.title),
-                "date": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,
-                "date_formatted": format_date_with_comma(m.meeting_date),  # New formatted date
+                "date": format_date_with_comma(m.meeting_date),  # Use formatted date with comma
+                "date_formatted": format_date_with_comma(m.meeting_date),  # Keep for compatibility
+                "date_raw": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,  # Raw date for processing
                 "time": str(m.meeting_time)[:5] if m.meeting_time else "",
                 "location": safe_string(m.location),
                 "status": safe_string(m.status),
                 "is_published": m.is_published,
                 "notes": safe_string(m.notes),
+                
+                # Summary button text (special handling)
+                "summary_button_text": "Summary Page Unavailable" if not (m.summary_url and m.summary_url.strip()) else "View Summary",
                 
                 # LEGACY NESTED STRUCTURE (for frontend compatibility)
                 "agenda": agenda,
@@ -577,6 +590,7 @@ def get_meetings_by_type(type_name):
                 "draft_minutes": draft_minutes,
                 "schedule_applications": schedule_applications,
                 "audio": audio,
+                "summary": summary,
                 
                 # Enhanced file fields with URLs
                 "agenda_filename": safe_string(m.agenda_filename),
@@ -641,6 +655,7 @@ def get_meetings_by_type(type_name):
         paginated_historic = historic_meetings[start_index:end_index]
         
         has_more_historic = end_index < total_historic
+        show_load_more = total_historic >= 10  # Show Load More if 10+ meetings
         
         # Return enhanced backward compatible format
         return jsonify({
@@ -659,7 +674,18 @@ def get_meetings_by_type(type_name):
                 "total_historic": total_historic,
                 "has_more": has_more_historic,
                 "showing": len(paginated_historic),
-                "total_pages": (total_historic + per_page - 1) // per_page
+                "total_pages": (total_historic + per_page - 1) // per_page,
+                "show_load_more_button": show_load_more,  # Frontend guidance
+                "load_more_enabled": has_more_historic,   # Whether button should be enabled
+                "load_more_text": "Load More Meetings" if has_more_historic else "All Meetings Loaded"
+            },
+            
+            # UI GUIDANCE (for frontend implementation)
+            "ui_hints": {
+                "date_format": "formatted_with_comma",  # Tells frontend to use formatted dates
+                "summary_button_text_field": "summary_button_text",  # Custom summary text
+                "load_more_position": "left_of_back_button",  # UI positioning hint
+                "load_more_threshold": 10  # Show button when >= 10 meetings
             },
             
             # METADATA

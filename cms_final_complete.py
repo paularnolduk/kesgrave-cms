@@ -107,6 +107,10 @@ def get_homepage_slides():
 def serve_events_fix():
     return send_from_directory(basedir, "events-fix.js")
 
+@app.route("/events-fix-v2.js")
+def serve_events_fix_v2():
+    return send_from_directory(basedir, "events-fix-v2.js")
+
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
     try:

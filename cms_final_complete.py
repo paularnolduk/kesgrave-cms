@@ -517,7 +517,49 @@ def get_meetings_by_type(type_name):
             return meeting_date.strftime('%A, %d %B %Y')
         
         def create_meeting_data(m):
-            """Create meeting data object with file availability flags"""
+            """Create meeting data object with file availability flags and legacy structure"""
+            
+            # Create legacy nested file structure for frontend compatibility
+            agenda = None
+            if m.agenda_filename and m.agenda_filename.strip():
+                agenda = {
+                    "file_url": f"/uploads/meetings/{m.agenda_filename}",
+                    "title": safe_string(m.agenda_title) or "Meeting Agenda",
+                    "description": safe_string(m.agenda_description) or ""
+                }
+            
+            minutes = None
+            if m.minutes_filename and m.minutes_filename.strip():
+                minutes = {
+                    "file_url": f"/uploads/meetings/{m.minutes_filename}",
+                    "title": safe_string(m.minutes_title) or "Approved Minutes",
+                    "description": safe_string(m.minutes_description) or ""
+                }
+            
+            draft_minutes = None
+            if m.draft_minutes_filename and m.draft_minutes_filename.strip():
+                draft_minutes = {
+                    "file_url": f"/uploads/meetings/{m.draft_minutes_filename}",
+                    "title": safe_string(m.draft_minutes_title) or "Draft Minutes",
+                    "description": safe_string(m.draft_minutes_description) or ""
+                }
+            
+            schedule_applications = None
+            if m.schedule_applications_filename and m.schedule_applications_filename.strip():
+                schedule_applications = {
+                    "file_url": f"/uploads/meetings/{m.schedule_applications_filename}",
+                    "title": safe_string(m.schedule_applications_title) or "Schedule of Applications",
+                    "description": safe_string(m.schedule_applications_description) or ""
+                }
+            
+            audio = None
+            if m.audio_filename and m.audio_filename.strip():
+                audio = {
+                    "file_url": f"/uploads/meetings/{m.audio_filename}",
+                    "title": safe_string(m.audio_title) or "Meeting Audio",
+                    "description": safe_string(m.audio_description) or ""
+                }
+            
             return {
                 "id": m.id,
                 "title": safe_string(m.title),
@@ -529,7 +571,14 @@ def get_meetings_by_type(type_name):
                 "is_published": m.is_published,
                 "notes": safe_string(m.notes),
                 
-                # File fields with URLs
+                # LEGACY NESTED STRUCTURE (for frontend compatibility)
+                "agenda": agenda,
+                "minutes": minutes,
+                "draft_minutes": draft_minutes,
+                "schedule_applications": schedule_applications,
+                "audio": audio,
+                
+                # Enhanced file fields with URLs
                 "agenda_filename": safe_string(m.agenda_filename),
                 "agenda_title": safe_string(m.agenda_title),
                 "agenda_description": safe_string(m.agenda_description),

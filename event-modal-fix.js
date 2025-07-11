@@ -6,18 +6,25 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded');
+    console.log('🔧 Event modal fix script loaded (corrected version)');
     
     let currentEventData = null;
     
-    // Wait for modal to appear
+    // Wait for modal to appear - updated to detect event-modal-* classes
     function waitForModal() {
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType === 1 && (node.classList?.contains('modal') || node.querySelector?.('.modal'))) {
-                        console.log('✅ Modal detected, enhancing...');
-                        enhanceModal(node.classList?.contains('modal') ? node : node.querySelector('.modal'));
+                    if (node.nodeType === 1) {
+                        // Check for event modal specific classes
+                        if (node.classList?.contains('event-modal-backdrop') || 
+                            node.classList?.contains('event-modal-container') ||
+                            node.querySelector?.('.event-modal-backdrop, .event-modal-container')) {
+                            console.log('✅ Event modal detected, enhancing...');
+                            const modal = node.classList?.contains('event-modal-backdrop') ? node : 
+                                         node.querySelector('.event-modal-backdrop, .event-modal-container');
+                            enhanceModal(modal);
+                        }
                     }
                 });
             });
@@ -29,8 +36,9 @@
         });
         
         // Also check for existing modals
-        const existingModal = document.querySelector('.modal');
+        const existingModal = document.querySelector('.event-modal-backdrop, .event-modal-container');
         if (existingModal) {
+            console.log('✅ Existing event modal found, enhancing...');
             enhanceModal(existingModal);
         }
     }
@@ -54,12 +62,13 @@
     }
     
     // Get event data from homepage API
-    async function getEventFromHomepage(eventId) {
+    async function getEventFromHomepage(eventTitle) {
         try {
             const response = await fetch('/api/homepage/events');
             if (response.ok) {
                 const events = await response.json();
-                const event = events.find(e => e.id === parseInt(eventId));
+                const event = events.find(e => e.title.toLowerCase().includes(eventTitle.toLowerCase()) || 
+                                              eventTitle.toLowerCase().includes(e.title.toLowerCase()));
                 console.log('✅ Event found in homepage data:', event);
                 return event;
             }
@@ -69,20 +78,13 @@
         return null;
     }
     
-    // Extract event ID from modal content
-    function extractEventId(modal) {
-        // Try to find event ID in modal content or data attributes
-        const eventIdElement = modal.querySelector('[data-event-id]');
-        if (eventIdElement) {
-            return eventIdElement.getAttribute('data-event-id');
-        }
-        
-        // Try to extract from URL or other sources
-        const titleElement = modal.querySelector('h2, h3, .modal-title');
+    // Extract event title from modal content
+    function extractEventTitle(modal) {
+        // Look for the title in the modal
+        const titleElement = modal.querySelector('.event-modal-title, h1, h2, h3');
         if (titleElement) {
             const title = titleElement.textContent.trim();
-            console.log('🔍 Looking for event with title:', title);
-            // We'll need to match this with our events data
+            console.log('🔍 Found event title:', title);
             return title;
         }
         
@@ -96,7 +98,7 @@
         }
         
         modal.setAttribute('data-enhanced', 'true');
-        console.log('🎨 Enhancing modal...');
+        console.log('🎨 Enhancing event modal...');
         
         // Add escape key handler
         const handleEscape = (e) => {
@@ -112,13 +114,10 @@
             document.removeEventListener('keydown', handleEscape);
         };
         
-        // Try to get event ID and data
-        const eventId = extractEventId(modal);
-        if (eventId) {
-            let eventData = await fetchEventDetails(eventId);
-            if (!eventData) {
-                eventData = await getEventFromHomepage(eventId);
-            }
+        // Try to get event title and data
+        const eventTitle = extractEventTitle(modal);
+        if (eventTitle) {
+            const eventData = await getEventFromHomepage(eventTitle);
             
             if (eventData) {
                 currentEventData = eventData;
@@ -132,28 +131,26 @@
         enhanceCloseButtons(modal);
     }
     
-    // Add event image to modal
+    // Add event image to modal header
     function addEventImage(modal, eventData) {
         if (!eventData.image) return;
         
-        const modalContent = modal.querySelector('.modal-content, .modal-body');
-        if (!modalContent) return;
+        const modalHeader = modal.querySelector('.event-modal-header');
+        if (!modalHeader) return;
         
         // Check if image already exists
         if (modal.querySelector('.event-modal-image')) return;
         
-        const imageContainer = document.createElement('div');
-        imageContainer.className = 'event-modal-image';
-        imageContainer.style.cssText = `
-            width: 100%;
-            height: 200px;
-            background-image: url('${eventData.image}');
+        console.log('🖼️ Adding event image to modal header');
+        
+        // Set background image on the header
+        modalHeader.style.cssText += `
+            background-image: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('${eventData.image}');
             background-size: cover;
             background-position: center;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            background-repeat: no-repeat;
+            min-height: 200px;
             position: relative;
-            overflow: hidden;
         `;
         
         // Add featured badge if applicable
@@ -163,11 +160,11 @@
             featuredBadge.textContent = 'FEATURED';
             featuredBadge.style.cssText = `
                 position: absolute;
-                top: 12px;
-                left: 12px;
-                padding: 6px 12px;
-                border-radius: 16px;
-                font-size: 0.7rem;
+                top: 16px;
+                left: 16px;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-size: 0.75rem;
                 font-weight: 700;
                 text-transform: uppercase;
                 color: white;
@@ -176,29 +173,32 @@
                 box-shadow: 0 2px 8px rgba(0,0,0,0.3);
                 border: 2px solid #e67e22;
             `;
-            imageContainer.appendChild(featuredBadge);
+            modalHeader.appendChild(featuredBadge);
         }
         
-        // Insert at the beginning of modal content
-        modalContent.insertBefore(imageContainer, modalContent.firstChild);
-        console.log('✅ Added event image to modal');
+        console.log('✅ Added event image and featured badge to modal');
     }
     
     // Add event tags/categories
     function addEventTags(modal, eventData) {
-        const modalContent = modal.querySelector('.modal-content, .modal-body');
-        if (!modalContent) return;
+        const modalHeader = modal.querySelector('.event-modal-header');
+        if (!modalHeader) return;
         
         // Check if tags already exist
         if (modal.querySelector('.event-modal-tags')) return;
         
+        console.log('🏷️ Adding event category tags');
+        
         const tagsContainer = document.createElement('div');
         tagsContainer.className = 'event-modal-tags';
         tagsContainer.style.cssText = `
+            position: absolute;
+            top: 16px;
+            right: 16px;
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
-            margin-bottom: 16px;
+            z-index: 10;
         `;
         
         // Determine categories based on title
@@ -206,379 +206,147 @@
         const title = eventData.title.toLowerCase();
         
         if (title.includes('meeting') || title.includes('council')) {
-            categories.push({ name: 'COUNCIL', color: '#3498db' });
+            categories.push({ name: 'COUNCIL', color: '#3498db', icon: '🏛️' });
         } else if (title.includes('market') || title.includes('fair')) {
-            categories.push({ name: 'COMMUNITY', color: '#e74c3c' });
+            categories.push({ name: 'COMMUNITY', color: '#e74c3c', icon: '👥' });
         } else {
-            categories.push({ name: 'EVENT', color: '#2ecc71' });
+            categories.push({ name: 'EVENT', color: '#2ecc71', icon: '⭐' });
         }
         
         categories.forEach(category => {
             const tag = document.createElement('span');
             tag.className = 'event-modal-tag';
-            tag.textContent = category.name;
+            tag.innerHTML = `${category.icon} ${category.name}`;
             tag.style.cssText = `
-                padding: 4px 12px;
-                border-radius: 12px;
+                padding: 6px 12px;
+                border-radius: 16px;
                 font-size: 0.7rem;
                 font-weight: 600;
                 text-transform: uppercase;
                 color: white;
                 background-color: ${category.color};
                 box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                border: 1px solid rgba(255,255,255,0.3);
             `;
             tagsContainer.appendChild(tag);
         });
         
-        // Insert after image or at beginning
-        const imageContainer = modal.querySelector('.event-modal-image');
-        if (imageContainer) {
-            imageContainer.parentNode.insertBefore(tagsContainer, imageContainer.nextSibling);
-        } else {
-            modalContent.insertBefore(tagsContainer, modalContent.firstChild);
-        }
-        
-        console.log('✅ Added event tags to modal');
+        modalHeader.appendChild(tagsContainer);
+        console.log('✅ Added category tags to modal');
     }
     
-    // Add content sections
+    // Add additional content sections
     function addContentSections(modal, eventData) {
-        const modalContent = modal.querySelector('.modal-content, .modal-body');
-        if (!modalContent) return;
+        const modalBody = modal.querySelector('.event-modal-body');
+        if (!modalBody) return;
         
         // Check if sections already exist
-        if (modal.querySelector('.event-modal-sections')) return;
+        if (modal.querySelector('.event-modal-quick-actions')) return;
         
-        const sectionsContainer = document.createElement('div');
-        sectionsContainer.className = 'event-modal-sections';
-        sectionsContainer.style.cssText = `
-            margin-top: 24px;
-            border-top: 1px solid #e5e7eb;
-            padding-top: 20px;
-        `;
-        
-        // Event Details Section
-        const detailsSection = createSection('Event Details', [
-            { label: 'Date', value: formatDate(eventData.date) },
-            { label: 'Location', value: eventData.location },
-            { label: 'Description', value: eventData.description }
-        ]);
-        sectionsContainer.appendChild(detailsSection);
+        console.log('📋 Adding additional content sections');
         
         // Quick Actions Section
-        const actionsSection = createActionsSection(eventData);
-        sectionsContainer.appendChild(actionsSection);
-        
-        // Related Links Section (if available)
-        if (eventData.website_url || eventData.booking_url) {
-            const linksSection = createLinksSection(eventData);
-            sectionsContainer.appendChild(linksSection);
-        }
-        
-        modalContent.appendChild(sectionsContainer);
-        console.log('✅ Added content sections to modal');
-    }
-    
-    // Create a content section
-    function createSection(title, items) {
-        const section = document.createElement('div');
-        section.className = 'event-modal-section';
-        section.style.cssText = `
-            margin-bottom: 20px;
+        const quickActionsSection = document.createElement('div');
+        quickActionsSection.className = 'event-modal-quick-actions';
+        quickActionsSection.innerHTML = `
+            <h3 style="color: #2c5f2d; margin-bottom: 16px; font-size: 1.1rem; font-weight: 600;">Quick Actions</h3>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <a href="https://maps.google.com/?q=${encodeURIComponent(eventData.location || 'Kesgrave Community Centre')}" 
+                   target="_blank" 
+                   style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background-color: #3498db; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: 500; transition: background-color 0.2s;">
+                    📍 View on Map
+                </a>
+                <a href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventData.title)}&dates=${eventData.date ? eventData.date.replace(/-/g, '') : ''}T100000/${eventData.date ? eventData.date.replace(/-/g, '') : ''}T160000&details=${encodeURIComponent(eventData.description || '')}&location=${encodeURIComponent(eventData.location || '')}" 
+                   target="_blank"
+                   style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background-color: #2ecc71; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: 500; transition: background-color 0.2s;">
+                    📅 Add to Calendar
+                </a>
+                <button onclick="navigator.share ? navigator.share({title: '${eventData.title}', text: '${eventData.description || ''}', url: window.location.href}) : navigator.clipboard.writeText(window.location.href).then(() => alert('Link copied to clipboard!'))" 
+                        style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background-color: #9b59b6; color: white; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: background-color 0.2s;">
+                    🔗 Share Event
+                </button>
+            </div>
         `;
-        
-        const sectionTitle = document.createElement('h4');
-        sectionTitle.textContent = title;
-        sectionTitle.style.cssText = `
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 12px;
-            border-bottom: 2px solid #10b981;
-            padding-bottom: 4px;
-        `;
-        section.appendChild(sectionTitle);
-        
-        items.forEach(item => {
-            if (item.value) {
-                const itemElement = document.createElement('div');
-                itemElement.style.cssText = `
-                    margin-bottom: 8px;
-                    display: flex;
-                    flex-wrap: wrap;
-                `;
-                
-                const label = document.createElement('span');
-                label.textContent = item.label + ': ';
-                label.style.cssText = `
-                    font-weight: 600;
-                    color: #6b7280;
-                    margin-right: 8px;
-                `;
-                
-                const value = document.createElement('span');
-                value.textContent = item.value;
-                value.style.cssText = `
-                    color: #374151;
-                `;
-                
-                itemElement.appendChild(label);
-                itemElement.appendChild(value);
-                section.appendChild(itemElement);
-            }
-        });
-        
-        return section;
-    }
-    
-    // Create actions section
-    function createActionsSection(eventData) {
-        const section = document.createElement('div');
-        section.className = 'event-modal-actions';
-        section.style.cssText = `
-            margin-bottom: 20px;
-        `;
-        
-        const sectionTitle = document.createElement('h4');
-        sectionTitle.textContent = 'Quick Actions';
-        sectionTitle.style.cssText = `
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 12px;
-            border-bottom: 2px solid #10b981;
-            padding-bottom: 4px;
-        `;
-        section.appendChild(sectionTitle);
-        
-        const actionsGrid = document.createElement('div');
-        actionsGrid.style.cssText = `
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-        `;
-        
-        // View on Map action
-        if (eventData.location) {
-            const mapButton = createActionButton(
-                '📍 View on Map',
-                `https://www.google.com/maps/search/${encodeURIComponent(eventData.location)}`,
-                '#3b82f6'
-            );
-            actionsGrid.appendChild(mapButton);
-        }
-        
-        // Add to Calendar action
-        const calendarButton = createActionButton(
-            '📅 Add to Calendar',
-            createCalendarLink(eventData),
-            '#10b981'
-        );
-        actionsGrid.appendChild(calendarButton);
-        
-        // Share Event action
-        const shareButton = createActionButton(
-            '🔗 Share Event',
-            '#',
-            '#8b5cf6'
-        );
-        shareButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            shareEvent(eventData);
-        });
-        actionsGrid.appendChild(shareButton);
-        
-        section.appendChild(actionsGrid);
-        return section;
-    }
-    
-    // Create links section
-    function createLinksSection(eventData) {
-        const section = document.createElement('div');
-        section.className = 'event-modal-links';
-        section.style.cssText = `
-            margin-bottom: 20px;
-        `;
-        
-        const sectionTitle = document.createElement('h4');
-        sectionTitle.textContent = 'Related Links';
-        sectionTitle.style.cssText = `
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 12px;
-            border-bottom: 2px solid #10b981;
-            padding-bottom: 4px;
-        `;
-        section.appendChild(sectionTitle);
-        
-        const linksGrid = document.createElement('div');
-        linksGrid.style.cssText = `
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-        `;
-        
-        if (eventData.website_url) {
-            const websiteButton = createActionButton(
-                '🌐 Event Website',
-                eventData.website_url,
-                '#6366f1'
-            );
-            linksGrid.appendChild(websiteButton);
-        }
-        
-        if (eventData.booking_url) {
-            const bookingButton = createActionButton(
-                '🎫 Book Now',
-                eventData.booking_url,
-                '#ef4444'
-            );
-            linksGrid.appendChild(bookingButton);
-        }
-        
-        section.appendChild(linksGrid);
-        return section;
-    }
-    
-    // Create action button
-    function createActionButton(text, href, color) {
-        const button = document.createElement('a');
-        button.href = href;
-        button.target = '_blank';
-        button.rel = 'noopener noreferrer';
-        button.textContent = text;
-        button.style.cssText = `
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 10px 16px;
-            background-color: ${color};
-            color: white;
-            text-decoration: none;
+        quickActionsSection.style.cssText = `
+            margin-top: 24px;
+            padding: 20px;
+            background-color: #f8f9fa;
             border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #2c5f2d;
         `;
         
-        button.addEventListener('mouseenter', () => {
-            button.style.transform = 'translateY(-1px)';
-            button.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-        });
+        // Event Details Enhancement
+        const eventDetailsSection = document.createElement('div');
+        eventDetailsSection.className = 'event-modal-enhanced-details';
+        eventDetailsSection.innerHTML = `
+            <h3 style="color: #2c5f2d; margin-bottom: 16px; font-size: 1.1rem; font-weight: 600;">Event Information</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                <div style="padding: 12px; background-color: white; border-radius: 6px; border: 1px solid #e9ecef;">
+                    <strong style="color: #495057; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Date & Time</strong>
+                    <p style="margin: 4px 0 0 0; color: #2c5f2d; font-weight: 500;">${eventData.date ? new Date(eventData.date).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Date TBA'}</p>
+                </div>
+                <div style="padding: 12px; background-color: white; border-radius: 6px; border: 1px solid #e9ecef;">
+                    <strong style="color: #495057; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Location</strong>
+                    <p style="margin: 4px 0 0 0; color: #2c5f2d; font-weight: 500;">${eventData.location || 'Location TBA'}</p>
+                </div>
+            </div>
+        `;
+        eventDetailsSection.style.cssText = `
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        `;
         
-        button.addEventListener('mouseleave', () => {
-            button.style.transform = 'translateY(0)';
-            button.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-        });
+        // Insert sections
+        modalBody.appendChild(eventDetailsSection);
+        modalBody.appendChild(quickActionsSection);
         
-        return button;
+        console.log('✅ Added quick actions and enhanced details sections');
     }
     
-    // Utility functions
-    function formatDate(dateString) {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-GB', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric'
-        });
-    }
-    
-    function createCalendarLink(eventData) {
-        const startDate = new Date(eventData.date);
-        const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // 2 hours later
+    // Close modal function
+    function closeModal(modal) {
+        console.log('🚪 Closing modal');
         
-        const formatDateForCalendar = (date) => {
-            return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-        };
+        // Cleanup escape listener
+        if (modal._cleanupEscape) {
+            modal._cleanupEscape();
+        }
         
-        const params = new URLSearchParams({
-            action: 'TEMPLATE',
-            text: eventData.title,
-            dates: `${formatDateForCalendar(startDate)}/${formatDateForCalendar(endDate)}`,
-            details: eventData.description || '',
-            location: eventData.location || ''
-        });
-        
-        return `https://calendar.google.com/calendar/render?${params.toString()}`;
-    }
-    
-    function shareEvent(eventData) {
-        if (navigator.share) {
-            navigator.share({
-                title: eventData.title,
-                text: eventData.description,
-                url: window.location.href
-            });
-        } else {
-            // Fallback: copy to clipboard
-            const shareText = `${eventData.title}\n${eventData.description}\n${window.location.href}`;
-            navigator.clipboard.writeText(shareText).then(() => {
-                alert('Event details copied to clipboard!');
-            });
+        // Remove modal from DOM
+        if (modal.parentNode) {
+            modal.parentNode.removeChild(modal);
         }
     }
     
     // Enhance close buttons
     function enhanceCloseButtons(modal) {
-        const closeButtons = modal.querySelectorAll('[data-dismiss="modal"], .close, .modal-close, .btn-close');
+        const closeButtons = modal.querySelectorAll('.event-modal-close, [aria-label*="Close"], [aria-label*="close"]');
+        
         closeButtons.forEach(button => {
             button.addEventListener('click', () => closeModal(modal));
         });
         
-        // Close on backdrop click
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeModal(modal);
-            }
-        });
-    }
-    
-    // Close modal function
-    function closeModal(modal) {
-        console.log('🔒 Closing modal...');
-        
-        // Cleanup escape handler
-        if (modal._cleanupEscape) {
-            modal._cleanupEscape();
-        }
-        
-        // Hide modal
-        modal.style.display = 'none';
-        modal.classList.remove('show');
-        
-        // Remove modal from DOM if needed
-        setTimeout(() => {
-            if (modal.parentNode) {
-                modal.parentNode.removeChild(modal);
-            }
-        }, 300);
-        
-        // Remove backdrop
-        const backdrop = document.querySelector('.modal-backdrop');
+        // Add backdrop click to close
+        const backdrop = modal.querySelector('.event-modal-backdrop');
         if (backdrop) {
-            backdrop.remove();
+            backdrop.addEventListener('click', (e) => {
+                if (e.target === backdrop) {
+                    closeModal(modal);
+                }
+            });
         }
         
-        // Restore body scroll
-        document.body.style.overflow = '';
-        document.body.classList.remove('modal-open');
+        console.log('✅ Enhanced close functionality');
     }
     
-    // Initialize
-    function init() {
-        console.log('🚀 Initializing event modal fix...');
-        waitForModal();
-    }
-    
-    // Run when DOM is ready
+    // Initialize when DOM is ready
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', waitForModal);
     } else {
-        init();
+        waitForModal();
     }
     
 })();

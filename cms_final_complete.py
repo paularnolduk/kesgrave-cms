@@ -499,8 +499,8 @@ def get_meetings_by_type(type_name):
         return jsonify([{
             "id": m.id,
             "title": safe_string(m.title),
-            "date": m.meeting_date,
-            "time": safe_string(str(m.meeting_time)) if m.meeting_time else "",
+            "date": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,
+            "time": str(m.meeting_time)[:5] if m.meeting_time else "",  # HH:MM format
             "location": safe_string(m.location),
             "agenda_filename": safe_string(m.agenda_filename),
             "minutes_filename": safe_string(m.minutes_filename),

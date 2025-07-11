@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (elegant overlay version)');
+    console.log('🔧 Event modal fix script loaded (final working version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -225,7 +225,7 @@
         
         console.log('🖼️ Adding event image with elegant overlay to modal header');
         
-        // Create background image overlay (behind everything)
+        // Create background image overlay (behind text but visible)
         const imageOverlay = document.createElement('div');
         imageOverlay.className = 'event-modal-image-enhancement';
         
@@ -233,7 +233,7 @@
         const imageUrl = eventData.image.startsWith('http') ? eventData.image : `https://kesgrave-cms.onrender.com${eventData.image}`;
         console.log('🔗 Full image URL:', imageUrl);
         
-        // Background image layer (z-index: -1, behind everything)
+        // Background image layer (z-index: 0, behind text but visible)
         imageOverlay.style.cssText = `
             position: absolute;
             top: 0;
@@ -244,7 +244,7 @@
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            z-index: -1;
+            z-index: 0;
             border-radius: inherit;
         `;
         

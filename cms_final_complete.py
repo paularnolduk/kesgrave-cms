@@ -503,6 +503,7 @@ def get_meetings_by_type(type_name):
         upcoming_meetings = []
         recent_meetings = []
         historic_meetings = []
+        all_meetings = []  # Flat array for backward compatibility
         
         for m in meetings:
             meeting_data = {
@@ -538,6 +539,9 @@ def get_meetings_by_type(type_name):
                 "audio_url": f"/uploads/meetings/{m.audio_filename}" if m.audio_filename else None
             }
             
+            # Add to flat array for backward compatibility
+            all_meetings.append(meeting_data)
+            
             # Categorize based on meeting date
             if m.meeting_date:
                 if m.meeting_date >= today:
@@ -551,12 +555,21 @@ def get_meetings_by_type(type_name):
         # Sort upcoming meetings by date (earliest first)
         upcoming_meetings.sort(key=lambda x: x['date'] if x['date'] else '')
         
-        # Return categorized data
+        # Return backward compatible format
+        # Frontend expects flat array, but we also provide categorized data
         return jsonify({
+            # OLD FORMAT (for current frontend compatibility)
+            "meetings": all_meetings,
+            
+            # NEW FORMAT (for future use)
             "upcoming": upcoming_meetings,
             "recent": recent_meetings,
             "historic": historic_meetings,
-            "total_count": len(meetings)
+            "total_count": len(meetings),
+            
+            # METADATA
+            "format_version": "v2_compatible",
+            "categorized": True
         })
         
     except Exception as e:

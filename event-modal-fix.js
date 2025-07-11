@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (timing fix version)');
+    console.log('🔧 Event modal fix script loaded (corrected targeting version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -17,18 +17,25 @@
             mutations.forEach((mutation) => {
                 mutation.addedNodes.forEach((node) => {
                     if (node.nodeType === 1) {
-                        // Check for event modal specific classes
-                        if (node.classList?.contains('event-modal-backdrop') || 
-                            node.classList?.contains('event-modal-container') ||
-                            node.querySelector?.('.event-modal-backdrop, .event-modal-container')) {
-                            console.log('✅ Event modal detected, enhancing...');
-                            const modal = node.classList?.contains('event-modal-backdrop') ? node : 
-                                         node.querySelector('.event-modal-backdrop, .event-modal-container');
-                            
+                        // Look specifically for the container element that has content
+                        let targetModal = null;
+                        
+                        if (node.classList?.contains('event-modal-container')) {
+                            targetModal = node;
+                        } else if (node.classList?.contains('event-modal-backdrop')) {
+                            // If backdrop is added, find the container inside it
+                            targetModal = node.querySelector('.event-modal-container');
+                        } else {
+                            // Check if a container was added inside this node
+                            targetModal = node.querySelector?.('.event-modal-container');
+                        }
+                        
+                        if (targetModal) {
+                            console.log('✅ Event modal container detected, enhancing...');
                             // Add a small delay to ensure modal content is fully rendered
                             setTimeout(() => {
-                                enhanceModal(modal);
-                            }, 100);
+                                enhanceModal(targetModal);
+                            }, 150);
                         }
                     }
                 });
@@ -40,13 +47,13 @@
             subtree: true
         });
         
-        // Also check for existing modals
-        const existingModal = document.querySelector('.event-modal-backdrop, .event-modal-container');
-        if (existingModal) {
-            console.log('✅ Existing event modal found, enhancing...');
+        // Also check for existing modal containers
+        const existingContainer = document.querySelector('.event-modal-container');
+        if (existingContainer) {
+            console.log('✅ Existing event modal container found, enhancing...');
             setTimeout(() => {
-                enhanceModal(existingModal);
-            }, 100);
+                enhanceModal(existingContainer);
+            }, 150);
         }
     }
     
@@ -103,7 +110,7 @@
     
     // Extract event title from modal content with better debugging
     function extractEventTitle(modal) {
-        console.log('🔍 Attempting to extract event title...');
+        console.log('🔍 Attempting to extract event title from modal container...');
         
         const selectors = [
             '.event-modal-title', 
@@ -127,7 +134,7 @@
             }
         }
         
-        console.warn('⚠️ Could not extract event title from modal');
+        console.warn('⚠️ Could not extract event title from modal container');
         return null;
     }
     
@@ -139,7 +146,7 @@
         }
         
         modal.setAttribute('data-enhanced', 'true');
-        console.log('🎨 Enhancing event modal...');
+        console.log('🎨 Enhancing event modal container...');
         
         // Add escape key handler
         escapeHandler = (e) => {
@@ -168,7 +175,7 @@
                     console.warn('⚠️ Could not find event data for:', eventTitle);
                 }
             } else {
-                console.warn('⚠️ Could not extract event title from modal');
+                console.warn('⚠️ Could not extract event title from modal container');
             }
         } catch (error) {
             console.error('❌ Error enhancing modal:', error);
@@ -189,7 +196,7 @@
         
         console.log('✅ Image available:', eventData.image);
         
-        // Find the modal header
+        // Find the modal header - look in the container and its children
         const headerSelectors = [
             '.event-modal-header',
             '[class*="modal-header"]',
@@ -206,7 +213,7 @@
         }
         
         if (!modalHeader) {
-            console.warn('⚠️ Could not find modal header element');
+            console.warn('⚠️ Could not find modal header element in container');
             return;
         }
         
@@ -279,9 +286,10 @@
     function addRelatedSections(modal, eventData) {
         console.log('📋 addRelatedSections called');
         
-        // Find the modal body
+        // Find the modal body - look in the container
         const bodySelectors = [
             '.event-modal-body',
+            '.event-modal-content',
             '[class*="modal-body"]',
             '[class*="body"]',
             '[class*="content"]'
@@ -441,8 +449,11 @@
             escapeHandler = null;
         }
         
-        // Try to find and click the existing close button
-        const closeButton = modal.querySelector('.event-modal-close, [aria-label*="Close"], [aria-label*="close"], button[class*="close"]');
+        // Try to find and click the existing close button (look in backdrop or container)
+        const backdrop = modal.closest('.event-modal-backdrop') || document.querySelector('.event-modal-backdrop');
+        const searchArea = backdrop || modal;
+        
+        const closeButton = searchArea.querySelector('.event-modal-close, [aria-label*="Close"], [aria-label*="close"], button[class*="close"]');
         if (closeButton) {
             console.log('✅ Found close button, clicking it');
             closeButton.click();
@@ -453,7 +464,11 @@
     
     // Enhance close buttons
     function enhanceCloseButtons(modal) {
-        const closeButtons = modal.querySelectorAll('.event-modal-close, [aria-label*="Close"], [aria-label*="close"], button[class*="close"]');
+        // Look for close buttons in the backdrop or container
+        const backdrop = modal.closest('.event-modal-backdrop') || document.querySelector('.event-modal-backdrop');
+        const searchArea = backdrop || modal;
+        
+        const closeButtons = searchArea.querySelectorAll('.event-modal-close, [aria-label*="Close"], [aria-label*="close"], button[class*="close"]');
         
         closeButtons.forEach(button => {
             // Add cleanup when the original close button is clicked
@@ -467,7 +482,6 @@
         });
         
         // Add backdrop click to close
-        const backdrop = modal.querySelector('.event-modal-backdrop');
         if (backdrop) {
             backdrop.addEventListener('click', (e) => {
                 if (e.target === backdrop) {
@@ -487,4 +501,3 @@
     }
     
 })();
-

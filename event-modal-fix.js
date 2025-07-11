@@ -36,7 +36,7 @@
                             // Increased delay to ensure modal content is fully rendered
                             setTimeout(() => {
                                 enhanceModal(targetModal);
-                            }, 400);
+                            }, 200);
                         }
                     }
                 });

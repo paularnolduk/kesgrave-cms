@@ -238,3 +238,188 @@
     
     console.log('Meeting page fixes + enhanced breadcrumb navigation initialized');
 })();
+
+(function() {
+    'use strict';
+    
+    console.log('🔗 Enhanced anchor fix loading...');
+    
+    let targetScrollPosition = null;
+    let anchorTarget = null;
+    let scrollLockActive = false;
+    
+    // Enhanced smooth scrolling with interference protection
+    function scrollToElementRobust(targetId, offset = 100) {
+        const element = document.getElementById(targetId);
+        if (!element) {
+            console.log('❌ Element not found:', targetId);
+            return false;
+        }
+        
+        const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+        const finalPosition = elementPosition - offset;
+        
+        // Store the target position for protection
+        targetScrollPosition = finalPosition;
+        anchorTarget = targetId;
+        scrollLockActive = true;
+        
+        console.log(`🎯 Scrolling to ${targetId} at position ${finalPosition}`);
+        
+        // Smooth scroll to position
+        window.scrollTo({
+            top: finalPosition,
+            behavior: 'smooth'
+        });
+        
+        // Protect the scroll position for 5 seconds
+        setTimeout(() => {
+            scrollLockActive = false;
+            targetScrollPosition = null;
+            anchorTarget = null;
+            console.log('🔓 Scroll protection disabled');
+        }, 5000);
+        
+        return true;
+    }
+    
+    // Monitor and protect scroll position
+    function protectScrollPosition() {
+        if (!scrollLockActive || targetScrollPosition === null) return;
+        
+        const currentPosition = window.pageYOffset || document.documentElement.scrollTop;
+        const tolerance = 50; // Allow small variations
+        
+        if (Math.abs(currentPosition - targetScrollPosition) > tolerance) {
+            console.log(`🛡️ Scroll interference detected! Restoring position from ${currentPosition} to ${targetScrollPosition}`);
+            
+            window.scrollTo({
+                top: targetScrollPosition,
+                behavior: 'smooth'
+            });
+        }
+    }
+    
+    // Handle anchor navigation with protection
+    function handleAnchorNavigation() {
+        const hash = window.location.hash.substring(1);
+        
+        if (hash) {
+            console.log('🔗 Handling anchor navigation for:', hash);
+            
+            // Multiple attempts with increasing delays
+            const attempts = [100, 500, 1000, 2000, 3000];
+            
+            attempts.forEach((delay, index) => {
+                setTimeout(() => {
+                    console.log(`🔄 Anchor attempt ${index + 1} for ${hash}`);
+                    scrollToElementRobust(hash);
+                }, delay);
+            });
+        }
+    }
+    
+    // Enhanced breadcrumb link fixing
+    function fixBreadcrumbLinks() {
+        console.log('🔧 Fixing breadcrumb links...');
+        
+        const categoryMapping = {
+            'Financial Information': 'financial-information',
+            'Business Plan': 'business-plan',
+            'Policies and Important Documents': 'policies-and-documents',
+            'Council Information': 'council-information',
+            'Reporting Problems': 'reporting-problems'
+        };
+        
+        const breadcrumbLinks = document.querySelectorAll('nav a[href^="/content/"]');
+        let fixed = 0;
+        
+        breadcrumbLinks.forEach(link => {
+            const href = link.getAttribute('href');
+            const text = link.textContent.trim();
+            
+            if (href !== '/content' && categoryMapping[text]) {
+                const newHref = `/content#${categoryMapping[text]}`;
+                link.setAttribute('href', newHref);
+                fixed++;
+                console.log(`✅ Fixed breadcrumb: "${text}" -> ${newHref}`);
+            }
+        });
+        
+        console.log(`🎯 Fixed ${fixed} breadcrumb links`);
+    }
+    
+    // Enhanced click handler for same-page navigation
+    function addClickHandlers() {
+        document.addEventListener('click', function(e) {
+            const link = e.target.closest('a[href*="#"]');
+            if (!link) return;
+            
+            const href = link.getAttribute('href');
+            const hash = href.split('#')[1];
+            
+            if (hash && window.location.pathname === '/content') {
+                console.log('🖱️ Same-page anchor click detected:', hash);
+                e.preventDefault();
+                
+                // Update URL
+                history.pushState(null, null, href);
+                
+                // Scroll with protection
+                setTimeout(() => scrollToElementRobust(hash), 100);
+            }
+        });
+    }
+    
+    // Set up scroll monitoring
+    function setupScrollMonitoring() {
+        // Monitor scroll events
+        let scrollTimeout;
+        window.addEventListener('scroll', function() {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(protectScrollPosition, 100);
+        });
+        
+        // Monitor for DOM changes that might affect scroll
+        const observer = new MutationObserver(function() {
+            if (scrollLockActive) {
+                setTimeout(protectScrollPosition, 100);
+            }
+        });
+        
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        console.log('👁️ Scroll monitoring active');
+    }
+    
+    // Initialize everything
+    function initializeEnhancedAnchorFix() {
+        console.log('🚀 Initializing enhanced anchor fix...');
+        
+        fixBreadcrumbLinks();
+        addClickHandlers();
+        setupScrollMonitoring();
+        handleAnchorNavigation();
+        
+        console.log('✅ Enhanced anchor fix initialized');
+    }
+    
+    // Run on page load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeEnhancedAnchorFix);
+    } else {
+        initializeEnhancedAnchorFix();
+    }
+    
+    // Handle hash changes
+    window.addEventListener('hashchange', handleAnchorNavigation);
+    
+    // Re-run fixes after delays for dynamic content
+    setTimeout(initializeEnhancedAnchorFix, 1000);
+    setTimeout(initializeEnhancedAnchorFix, 3000);
+    
+    console.log('🔗 Enhanced anchor fix loaded');
+})();

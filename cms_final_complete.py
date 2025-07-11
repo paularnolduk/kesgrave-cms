@@ -469,6 +469,76 @@ def get_content_categories():
     except Exception as e:
         return jsonify({"error": f"Failed to load content categories: {str(e)}"}), 500
 
+@app.route('/api/content/page/<slug>')
+def get_content_page_by_slug(slug):
+    try:
+        init_models()
+        
+        # Find the page by slug
+        page = db.session.query(ContentPage).filter(ContentPage.slug == slug).first()
+        
+        if not page:
+            return jsonify({"error": f"Page '{slug}' not found"}), 404
+        
+        # Get category and subcategory objects
+        category = None
+        subcategory = None
+        
+        if page.category_id:
+            cat = db.session.query(ContentCategory).filter(ContentCategory.id == page.category_id).first()
+            if cat:
+                category = {
+                    "id": cat.id,
+                    "name": safe_string(cat.name),
+                    "description": safe_string(cat.description),
+                    "color": safe_string(cat.color),
+                    "url_path": safe_string(cat.url_path)
+                }
+        
+        if page.subcategory_id:
+            subcat = db.session.query(ContentCategory).filter(ContentCategory.id == page.subcategory_id).first()
+            if subcat:
+                subcategory = {
+                    "id": subcat.id,
+                    "name": safe_string(subcat.name),
+                    "description": safe_string(subcat.description),
+                    "color": safe_string(subcat.color),
+                    "url_path": safe_string(subcat.url_path)
+                }
+        
+        # Use the most recent date as updated_at
+        updated_at = page.last_reviewed or page.approval_date or page.creation_date
+        
+        # Build the response with all fields the frontend expects
+        result = {
+            "id": page.id,
+            "title": safe_string(page.title),
+            "slug": safe_string(page.slug),
+            "short_description": safe_string(page.short_description),
+            "long_description": safe_string(page.long_description),
+            "category_id": page.category_id,
+            "subcategory_id": page.subcategory_id,
+            "category": category,
+            "subcategory": subcategory,
+            "status": safe_string(page.status),
+            "is_featured": page.is_featured,
+            "creation_date": page.creation_date,
+            "approval_date": page.approval_date,
+            "last_reviewed": page.last_reviewed,
+            "next_review_date": page.next_review_date,
+            "updated_at": updated_at,
+            
+            # Additional fields that the frontend might expect
+            "gallery_images": [],  # TODO: Add gallery support if needed
+            "downloads": [],       # TODO: Add downloads support if needed
+            "related_links": []    # TODO: Add related links support if needed
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"error": f"Failed to load content page: {str(e)}"}), 500
+
 # === MEETING API Routes ===
 @app.route('/api/meeting-types')
 def get_meeting_types():

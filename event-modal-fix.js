@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (final complete version)');
+    console.log('🔧 Event modal fix script loaded (elegant overlay version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -168,7 +168,7 @@
                 if (eventData) {
                     currentEventData = eventData;
                     console.log('🖼️ Adding image to modal...');
-                    addEventImage(modal, eventData);
+                    addEventImageWithElegantOverlay(modal, eventData);
                     console.log('📋 Adding related sections...');
                     addRelatedSections(modal, eventData);
                 } else {
@@ -185,9 +185,9 @@
         enhanceCloseButtons(modal);
     }
     
-    // Add event image to modal header with BOTH fixes: correct z-index AND text visibility
-    function addEventImage(modal, eventData) {
-        console.log('🖼️ addEventImage called with:', eventData);
+    // Add event image with elegant layered overlay approach
+    function addEventImageWithElegantOverlay(modal, eventData) {
+        console.log('🖼️ addEventImageWithElegantOverlay called with:', eventData);
         
         if (!eventData.image) {
             console.log('ℹ️ No image available for event, image field:', eventData.image);
@@ -223,9 +223,9 @@
             return;
         }
         
-        console.log('🖼️ Adding event image to modal header');
+        console.log('🖼️ Adding event image with elegant overlay to modal header');
         
-        // Create image overlay
+        // Create background image overlay (behind everything)
         const imageOverlay = document.createElement('div');
         imageOverlay.className = 'event-modal-image-enhancement';
         
@@ -233,18 +233,18 @@
         const imageUrl = eventData.image.startsWith('http') ? eventData.image : `https://kesgrave-cms.onrender.com${eventData.image}`;
         console.log('🔗 Full image URL:', imageUrl);
         
-        // FIXED: Changed z-index from -1 to 0 to make image visible
+        // Background image layer (z-index: -1, behind everything)
         imageOverlay.style.cssText = `
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('${imageUrl}');
+            background-image: url('${imageUrl}');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            z-index: 0;
+            z-index: -1;
             border-radius: inherit;
         `;
         
@@ -256,11 +256,33 @@
         
         modalHeader.appendChild(imageOverlay);
         
-        // FIXED: Ensure text elements are visible above the image
-        console.log('📝 Fixing text visibility...');
-        fixTextVisibility(modalHeader);
+        // Create text transparency overlay (only covers text area)
+        const textOverlay = document.createElement('div');
+        textOverlay.className = 'event-modal-text-overlay-enhancement';
+        textOverlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 120px;
+            background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.3));
+            z-index: 1;
+            pointer-events: none;
+            border-radius: inherit;
+        `;
         
-        // Add featured badge if applicable (positioned to not cover close button)
+        modalHeader.appendChild(textOverlay);
+        console.log('✅ Added text transparency overlay');
+        
+        // Ensure text elements are above the text overlay (but keep original positioning)
+        const textContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
+        textContainers.forEach((container, index) => {
+            console.log(`📝 Setting text container ${index + 1} above overlay`);
+            container.style.position = 'relative';
+            container.style.zIndex = '2';
+        });
+        
+        // Add featured badge if applicable (highest layer)
         if (eventData.featured) {
             const featuredBadge = document.createElement('div');
             featuredBadge.className = 'event-modal-featured-badge-enhancement';
@@ -284,31 +306,7 @@
             console.log('✅ Added featured badge');
         }
         
-        console.log('✅ Successfully added event image and featured badge to modal');
-    }
-    
-    // NEW: Fix text visibility by ensuring text elements have higher z-index than image
-    function fixTextVisibility(modalHeader) {
-        // Find the main text container elements
-        const textContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
-        
-        textContainers.forEach((container, index) => {
-            console.log(`📝 Fixing container ${index + 1}: ${container.className}`);
-            
-            // Give it relative positioning and high z-index
-            container.style.position = 'relative';
-            container.style.zIndex = '5';
-        });
-        
-        // Also fix individual text elements if needed
-        const textElements = modalHeader.querySelectorAll('.event-modal-title, .event-modal-datetime');
-        textElements.forEach((element, index) => {
-            console.log(`📝 Fixing text element ${index + 1}: ${element.className}`);
-            element.style.position = 'relative';
-            element.style.zIndex = '5';
-        });
-        
-        console.log('✅ Text visibility fix applied!');
+        console.log('✅ Successfully added elegant layered image overlay to modal');
     }
     
     // Add related sections (simplified for debugging)

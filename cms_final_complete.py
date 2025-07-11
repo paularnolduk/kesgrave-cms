@@ -119,6 +119,10 @@ def serve_events_fix_v3():
 def serve_events_fix_v4():
     return send_from_directory(basedir, "events-fix-v4.js")
 
+@app.route("/event-modal-fix.js")
+def serve_event_modal_fix():
+    return send_from_directory(basedir, "event-modal-fix.js")
+
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
     try:

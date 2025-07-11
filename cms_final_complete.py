@@ -124,16 +124,18 @@ def serve_event_modal_fix():
     return send_from_directory(basedir, "event-modal-fix.js")
 
 @app.route('/api/homepage/quick-links')
+@app.route('/api/homepage/quick-links')
 def get_quick_links():
     try:
         init_models()
         links = db.session.query(QuickLink).all()
         return jsonify([{
             "id": l.id,
-            "title": safe_string(l.title),
-            "description": safe_string(l.description),
-            "url": safe_string(l.button_url),
-            "button_text": safe_string(l.button_name),
+            "label": safe_string(l.title),                    # ✅ Title (working)
+            "description": safe_string(l.description),       # ✅ FIXED: Added description
+            "button_text": safe_string(l.button_name),       # ✅ FIXED: Added button text
+            "url": safe_string(l.button_url),                # ✅ Button URL
+            "icon": safe_string(safe_getattr(l, 'icon', '')), # ✅ Icon (if exists)
             "sort_order": l.sort_order,
             "is_active": l.is_active
         } for l in links])

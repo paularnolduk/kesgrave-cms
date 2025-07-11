@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (text area gradient version)');
+    console.log('🔧 Event modal fix script loaded (unified text container version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -168,7 +168,7 @@
                 if (eventData) {
                     currentEventData = eventData;
                     console.log('🖼️ Adding image to modal...');
-                    addEventImageWithTextAreaGradient(modal, eventData);
+                    addEventImageWithUnifiedText(modal, eventData);
                     console.log('📋 Adding related sections...');
                     addRelatedSections(modal, eventData);
                 } else {
@@ -185,9 +185,9 @@
         enhanceCloseButtons(modal);
     }
     
-    // Add event image with precise text-area gradient
-    function addEventImageWithTextAreaGradient(modal, eventData) {
-        console.log('🖼️ addEventImageWithTextAreaGradient called with:', eventData);
+    // Add event image with unified text container
+    function addEventImageWithUnifiedText(modal, eventData) {
+        console.log('🖼️ addEventImageWithUnifiedText called with:', eventData);
         
         if (!eventData.image) {
             console.log('ℹ️ No image available for event, image field:', eventData.image);
@@ -223,7 +223,7 @@
             return;
         }
         
-        console.log('🖼️ Adding event image with text-area gradient to modal header');
+        console.log('🖼️ Adding event image with unified text container to modal header');
         
         // Create background image overlay
         const imageOverlay = document.createElement('div');
@@ -256,36 +256,75 @@
         
         modalHeader.appendChild(imageOverlay);
         
-        // Move text containers to bottom and apply precise gradient
-        const textContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
-        textContainers.forEach((container, index) => {
-            console.log(`📝 Applying text-area gradient to container ${index + 1}`);
-            
-            // Position text at bottom
-            container.style.position = 'absolute';
-            container.style.top = 'auto';
-            container.style.bottom = '20px';
-            container.style.left = '20px';
-            container.style.right = 'auto';
-            container.style.zIndex = '3';
-            
-            // Apply gradient background directly to the text container (precise area only)
-            container.style.background = 'linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.5))';
-            container.style.borderRadius = '12px';
-            container.style.backdropFilter = 'blur(2px)';
-            container.style.padding = '16px 20px';
-            container.style.margin = '0';
-            container.style.width = 'fit-content';
-            container.style.maxWidth = '80%';
-            
-            // Ensure text is white and visible
-            container.style.color = 'white';
-            const textElements = container.querySelectorAll('*');
-            textElements.forEach(el => {
-                el.style.color = 'white';
-                el.style.textShadow = '0 1px 2px rgba(0,0,0,0.5)';
-            });
+        // Extract text content from existing containers
+        const existingContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
+        let titleText = '';
+        let dateText = '';
+        let timeText = '';
+        
+        existingContainers.forEach(container => {
+            const text = container.textContent.trim();
+            if (text.includes('Market') || text.includes('Fair') || text.includes('Fireworks') || text.includes('Night')) {
+                titleText = text;
+            } else if (text.includes('Saturday') || text.includes('Tuesday') || text.includes('Sunday') || text.includes('Monday') || text.includes('Wednesday') || text.includes('Thursday') || text.includes('Friday')) {
+                dateText = text;
+            } else if (text.includes(':') && text.includes('-')) {
+                timeText = text;
+            }
         });
+        
+        // If we couldn't extract properly, try to get from the event data
+        if (!titleText) titleText = eventData.title || 'Event';
+        if (!dateText && eventData.date) {
+            const eventDate = new Date(eventData.date);
+            dateText = eventDate.toLocaleDateString('en-GB', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long', 
+                year: 'numeric' 
+            });
+        }
+        if (!timeText && eventData.time) timeText = eventData.time;
+        
+        console.log('📝 Extracted text:', { titleText, dateText, timeText });
+        
+        // Create unified text container
+        const unifiedContainer = document.createElement('div');
+        unifiedContainer.className = 'event-modal-unified-text-container';
+        
+        // Create proper HTML structure with better spacing
+        unifiedContainer.innerHTML = `
+            <h1 style="margin: 0 0 12px 0; font-size: 2rem; font-weight: 700; line-height: 1.2;">${titleText}</h1>
+            <div style="display: flex; align-items: center; gap: 20px; font-size: 1rem; opacity: 0.95; flex-wrap: wrap;">
+                ${dateText ? `<span style="display: flex; align-items: center; gap: 6px;">📅 ${dateText}</span>` : ''}
+                ${timeText ? `<span style="display: flex; align-items: center; gap: 6px;">🕐 ${timeText}</span>` : ''}
+            </div>
+        `;
+        
+        // Apply the precise gradient styling
+        unifiedContainer.style.cssText = `
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 3;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.5));
+            border-radius: 12px;
+            backdrop-filter: blur(2px);
+            padding: 20px 24px;
+            margin: 0;
+            width: fit-content;
+            max-width: 80%;
+            color: white;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        `;
+        
+        // Remove the old containers
+        existingContainers.forEach(container => {
+            container.remove();
+        });
+        
+        // Add the new unified container
+        modalHeader.appendChild(unifiedContainer);
         
         // Add featured badge if applicable (highest layer)
         if (eventData.featured) {
@@ -311,7 +350,7 @@
             console.log('✅ Added featured badge');
         }
         
-        console.log('✅ Successfully added image with text-area gradient to modal');
+        console.log('✅ Successfully added image with unified text container to modal');
     }
     
     // Add related sections (simplified for debugging)

@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (final timing fix version)');
+    console.log('🔧 Event modal fix script loaded (final complete version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -185,7 +185,7 @@
         enhanceCloseButtons(modal);
     }
     
-    // Add event image to modal header with better debugging
+    // Add event image to modal header with BOTH fixes: correct z-index AND text visibility
     function addEventImage(modal, eventData) {
         console.log('🖼️ addEventImage called with:', eventData);
         
@@ -233,6 +233,7 @@
         const imageUrl = eventData.image.startsWith('http') ? eventData.image : `https://kesgrave-cms.onrender.com${eventData.image}`;
         console.log('🔗 Full image URL:', imageUrl);
         
+        // FIXED: Changed z-index from -1 to 0 to make image visible
         imageOverlay.style.cssText = `
             position: absolute;
             top: 0;
@@ -254,6 +255,10 @@
         }
         
         modalHeader.appendChild(imageOverlay);
+        
+        // FIXED: Ensure text elements are visible above the image
+        console.log('📝 Fixing text visibility...');
+        fixTextVisibility(modalHeader);
         
         // Add featured badge if applicable (positioned to not cover close button)
         if (eventData.featured) {
@@ -280,6 +285,30 @@
         }
         
         console.log('✅ Successfully added event image and featured badge to modal');
+    }
+    
+    // NEW: Fix text visibility by ensuring text elements have higher z-index than image
+    function fixTextVisibility(modalHeader) {
+        // Find the main text container elements
+        const textContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
+        
+        textContainers.forEach((container, index) => {
+            console.log(`📝 Fixing container ${index + 1}: ${container.className}`);
+            
+            // Give it relative positioning and high z-index
+            container.style.position = 'relative';
+            container.style.zIndex = '5';
+        });
+        
+        // Also fix individual text elements if needed
+        const textElements = modalHeader.querySelectorAll('.event-modal-title, .event-modal-datetime');
+        textElements.forEach((element, index) => {
+            console.log(`📝 Fixing text element ${index + 1}: ${element.className}`);
+            element.style.position = 'relative';
+            element.style.zIndex = '5';
+        });
+        
+        console.log('✅ Text visibility fix applied!');
     }
     
     // Add related sections (simplified for debugging)

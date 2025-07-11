@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (corrected targeting version)');
+    console.log('🔧 Event modal fix script loaded (final timing fix version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -32,10 +32,10 @@
                         
                         if (targetModal) {
                             console.log('✅ Event modal container detected, enhancing...');
-                            // Add a small delay to ensure modal content is fully rendered
+                            // Increased delay to ensure modal content is fully rendered
                             setTimeout(() => {
                                 enhanceModal(targetModal);
-                            }, 150);
+                            }, 400);
                         }
                     }
                 });
@@ -53,7 +53,7 @@
             console.log('✅ Existing event modal container found, enhancing...');
             setTimeout(() => {
                 enhanceModal(existingContainer);
-            }, 150);
+            }, 400);
         }
     }
     

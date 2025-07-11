@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (final working version)');
+    console.log('🔧 Event modal fix script loaded (bottom text version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -168,7 +168,7 @@
                 if (eventData) {
                     currentEventData = eventData;
                     console.log('🖼️ Adding image to modal...');
-                    addEventImageWithElegantOverlay(modal, eventData);
+                    addEventImageWithBottomText(modal, eventData);
                     console.log('📋 Adding related sections...');
                     addRelatedSections(modal, eventData);
                 } else {
@@ -185,9 +185,9 @@
         enhanceCloseButtons(modal);
     }
     
-    // Add event image with elegant layered overlay approach
-    function addEventImageWithElegantOverlay(modal, eventData) {
-        console.log('🖼️ addEventImageWithElegantOverlay called with:', eventData);
+    // Add event image with bottom-aligned text and single overlay
+    function addEventImageWithBottomText(modal, eventData) {
+        console.log('🖼️ addEventImageWithBottomText called with:', eventData);
         
         if (!eventData.image) {
             console.log('ℹ️ No image available for event, image field:', eventData.image);
@@ -223,9 +223,9 @@
             return;
         }
         
-        console.log('🖼️ Adding event image with elegant overlay to modal header');
+        console.log('🖼️ Adding event image with bottom text to modal header');
         
-        // Create background image overlay (behind text but visible)
+        // Create background image overlay
         const imageOverlay = document.createElement('div');
         imageOverlay.className = 'event-modal-image-enhancement';
         
@@ -256,31 +256,38 @@
         
         modalHeader.appendChild(imageOverlay);
         
-        // Create text transparency overlay (only covers text area)
-        const textOverlay = document.createElement('div');
-        textOverlay.className = 'event-modal-text-overlay-enhancement';
-        textOverlay.style.cssText = `
+        // Move text containers to bottom
+        const textContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
+        textContainers.forEach((container, index) => {
+            console.log(`📝 Moving text container ${index + 1} to bottom`);
+            
+            // Position text at bottom
+            container.style.position = 'absolute';
+            container.style.top = 'auto';
+            container.style.bottom = '0';
+            container.style.left = '0';
+            container.style.right = '0';
+            container.style.zIndex = '3';
+            container.style.padding = '20px';
+        });
+        
+        // Create single bottom overlay for text readability
+        const bottomOverlay = document.createElement('div');
+        bottomOverlay.className = 'event-modal-bottom-overlay-enhancement';
+        bottomOverlay.style.cssText = `
             position: absolute;
-            top: 0;
+            bottom: 0;
             left: 0;
             right: 0;
-            height: 120px;
-            background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.3));
-            z-index: 1;
+            height: 100px;
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+            z-index: 2;
             pointer-events: none;
             border-radius: inherit;
         `;
         
-        modalHeader.appendChild(textOverlay);
-        console.log('✅ Added text transparency overlay');
-        
-        // Ensure text elements are above the text overlay (but keep original positioning)
-        const textContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
-        textContainers.forEach((container, index) => {
-            console.log(`📝 Setting text container ${index + 1} above overlay`);
-            container.style.position = 'relative';
-            container.style.zIndex = '2';
-        });
+        modalHeader.appendChild(bottomOverlay);
+        console.log('✅ Added bottom overlay for text');
         
         // Add featured badge if applicable (highest layer)
         if (eventData.featured) {
@@ -306,7 +313,7 @@
             console.log('✅ Added featured badge');
         }
         
-        console.log('✅ Successfully added elegant layered image overlay to modal');
+        console.log('✅ Successfully added image with bottom-aligned text to modal');
     }
     
     // Add related sections (simplified for debugging)

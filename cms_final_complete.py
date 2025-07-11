@@ -190,7 +190,7 @@ def serve_event_modal_fix():
 # Meeting Page Fixes JS (with enhanced breadcrumbs)
 @app.route("/meeting-page-dates.js")
 def serve_meeting_page_dates():
-    return send_from_directory(basedir, "meeting_page_dates_final.js")
+    return send_from_directory(basedir, "meeting_page_dates.js")
 
 @app.route('/api/homepage/quick-links')
 def get_quick_links():

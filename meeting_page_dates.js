@@ -1,5 +1,3 @@
-// This script fixes the date formatting and summary button text issues
-
 (function() {
     'use strict';
     
@@ -24,28 +22,62 @@
         });
     }
     
-    // Fix summary button text
+    // Fix summary button text - improved targeting
     function fixSummaryButtons() {
-        // Find all buttons with "AVAILABLE SOON" text that are summary buttons
-        const buttons = document.querySelectorAll('button');
+        console.log('Looking for summary buttons...');
         
-        buttons.forEach(button => {
+        // Find all buttons with "AVAILABLE SOON" text
+        const buttons = document.querySelectorAll('button');
+        let summaryButtonsFound = 0;
+        
+        buttons.forEach((button, index) => {
             const text = button.textContent.trim();
             
-            // Check if this is a summary button (usually the last button in a meeting card)
+            // Check if this is a summary button
             if (text === 'AVAILABLE SOON') {
-                const buttonParent = button.closest('.meeting-card, [class*="meeting"], [class*="card"]');
-                if (buttonParent) {
-                    // Check if this is likely a summary button (last button or has summary-related class)
-                    const allButtons = buttonParent.querySelectorAll('button');
-                    const isLastButton = button === allButtons[allButtons.length - 1];
-                    
-                    if (isLastButton || button.textContent.toLowerCase().includes('summary')) {
-                        button.textContent = 'Summary Page Unavailable';
-                        button.style.cursor = 'not-allowed';
-                        button.style.opacity = '0.6';
-                        console.log('Fixed summary button text');
-                    }
+                // Get the parent container
+                const parent = button.parentElement;
+                
+                // Check if this button has an icon (summary buttons typically have icons)
+                const hasIcon = button.querySelector('svg, i, [class*="icon"]') || 
+                               button.innerHTML.includes('📄') || 
+                               button.innerHTML.includes('📋');
+                
+                // Check if this is the only "AVAILABLE SOON" button in its container
+                // (summary buttons are typically standalone, not part of a group)
+                const siblingButtons = parent ? parent.querySelectorAll('button') : [];
+                const availableSoonButtons = Array.from(siblingButtons).filter(btn => 
+                    btn.textContent.trim() === 'AVAILABLE SOON'
+                );
+                
+                // If this is a standalone "AVAILABLE SOON" button, it's likely a summary button
+                if (availableSoonButtons.length === 1 || hasIcon) {
+                    button.textContent = 'Summary Page Unavailable';
+                    button.style.cursor = 'not-allowed';
+                    button.style.opacity = '0.6';
+                    button.disabled = true;
+                    summaryButtonsFound++;
+                    console.log('Fixed summary button #' + summaryButtonsFound + ' (index: ' + index + ')');
+                }
+            }
+        });
+        
+        console.log('Total summary buttons fixed:', summaryButtonsFound);
+        
+        // Alternative approach: target buttons that are likely summary buttons by position
+        // Look for buttons that are the last in their meeting card section
+        const meetingCards = document.querySelectorAll('[class*="meeting"], .card, section');
+        meetingCards.forEach((card, cardIndex) => {
+            const cardButtons = card.querySelectorAll('button');
+            if (cardButtons.length > 0) {
+                const lastButton = cardButtons[cardButtons.length - 1];
+                if (lastButton.textContent.trim() === 'AVAILABLE SOON' && 
+                    !lastButton.textContent.includes('Summary Page Unavailable')) {
+                    lastButton.textContent = 'Summary Page Unavailable';
+                    lastButton.style.cursor = 'not-allowed';
+                    lastButton.style.opacity = '0.6';
+                    lastButton.disabled = true;
+                    console.log('Fixed last button in card #' + cardIndex + ' as summary button');
                 }
             }
         });
@@ -53,8 +85,10 @@
     
     // Apply fixes when page loads
     function applyFixes() {
+        console.log('Applying meeting page fixes...');
         fixDateFormatting();
         fixSummaryButtons();
+        console.log('Meeting page fixes applied');
     }
     
     // Run fixes on page load
@@ -64,9 +98,16 @@
         applyFixes();
     }
     
-    // Also run fixes after a short delay to catch dynamically loaded content
-    setTimeout(applyFixes, 1000);
-    setTimeout(applyFixes, 3000);
+    // Also run fixes after delays to catch dynamically loaded content
+    setTimeout(() => {
+        console.log('Running delayed fixes (1s)...');
+        applyFixes();
+    }, 1000);
+    
+    setTimeout(() => {
+        console.log('Running delayed fixes (3s)...');
+        applyFixes();
+    }, 3000);
     
     // Set up a mutation observer to catch dynamic content changes
     const observer = new MutationObserver(function(mutations) {
@@ -79,6 +120,7 @@
         });
         
         if (shouldApplyFixes) {
+            console.log('Content changed, applying fixes...');
             setTimeout(applyFixes, 100);
         }
     });
@@ -88,5 +130,5 @@
         subtree: true
     });
     
-    console.log('Meeting page fixes initialized');
+    console.log('Meeting page fixes initialized with mutation observer');
 })();

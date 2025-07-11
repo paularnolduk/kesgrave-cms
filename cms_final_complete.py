@@ -375,21 +375,56 @@ def get_content_pages():
     try:
         init_models()
         pages = db.session.query(ContentPage).all()
-        return jsonify([{
-            "id": p.id,
-            "title": safe_string(p.title),
-            "slug": safe_string(p.slug),
-            "short_description": safe_string(p.short_description),
-            "long_description": safe_string(p.long_description),
-            "category_id": p.category_id,
-            "subcategory_id": p.subcategory_id,
-            "status": safe_string(p.status),
-            "is_featured": p.is_featured,
-            "creation_date": p.creation_date,
-            "approval_date": p.approval_date,
-            "last_reviewed": p.last_reviewed,
-            "next_review_date": p.next_review_date
-        } for p in pages])
+        
+        result = []
+        for p in pages:
+            # Get category and subcategory objects
+            category = None
+            subcategory = None
+            
+            if p.category_id:
+                cat = db.session.query(ContentCategory).filter(ContentCategory.id == p.category_id).first()
+                if cat:
+                    category = {
+                        "id": cat.id,
+                        "name": safe_string(cat.name),
+                        "description": safe_string(cat.description),
+                        "color": safe_string(cat.color)
+                    }
+            
+            if p.subcategory_id:
+                subcat = db.session.query(ContentCategory).filter(ContentCategory.id == p.subcategory_id).first()
+                if subcat:
+                    subcategory = {
+                        "id": subcat.id,
+                        "name": safe_string(subcat.name),
+                        "description": safe_string(subcat.description),
+                        "color": safe_string(subcat.color)
+                    }
+            
+            # Use the most recent date as updated_at
+            updated_at = p.last_reviewed or p.approval_date or p.creation_date
+            
+            result.append({
+                "id": p.id,
+                "title": safe_string(p.title),
+                "slug": safe_string(p.slug),
+                "short_description": safe_string(p.short_description),
+                "long_description": safe_string(p.long_description),
+                "category_id": p.category_id,
+                "subcategory_id": p.subcategory_id,
+                "category": category,  # Added category object
+                "subcategory": subcategory,  # Added subcategory object
+                "status": safe_string(p.status),
+                "is_featured": p.is_featured,
+                "creation_date": p.creation_date,
+                "approval_date": p.approval_date,
+                "last_reviewed": p.last_reviewed,
+                "next_review_date": p.next_review_date,
+                "updated_at": updated_at  # Added updated_at field
+            })
+        
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": f"Failed to load content pages: {str(e)}"}), 500
 
@@ -398,15 +433,39 @@ def get_content_categories():
     try:
         init_models()
         categories = db.session.query(ContentCategory).all()
-        return jsonify([{
-            "id": c.id,
-            "name": safe_string(c.name),
-            "description": safe_string(c.description),
-            "color": safe_string(c.color),
-            "is_active": c.is_active,
-            "is_predefined": c.is_predefined,
-            "url_path": safe_string(c.url_path)
-        } for c in categories])
+        
+        result = []
+        for c in categories:
+            # Count pages in this category
+            page_count = db.session.query(ContentPage).filter(ContentPage.category_id == c.id).count()
+            
+            # Get subcategories (if any)
+            subcategories = db.session.query(ContentCategory).filter(ContentCategory.parent_id == c.id).all() if hasattr(ContentCategory, 'parent_id') else []
+            
+            subcategories_data = []
+            for sub in subcategories:
+                sub_page_count = db.session.query(ContentPage).filter(ContentPage.subcategory_id == sub.id).count()
+                subcategories_data.append({
+                    "id": sub.id,
+                    "name": safe_string(sub.name),
+                    "description": safe_string(sub.description),
+                    "color": safe_string(sub.color),
+                    "page_count": sub_page_count
+                })
+            
+            result.append({
+                "id": c.id,
+                "name": safe_string(c.name),
+                "description": safe_string(c.description),
+                "color": safe_string(c.color),
+                "is_active": c.is_active,
+                "is_predefined": c.is_predefined,
+                "url_path": safe_string(c.url_path),
+                "page_count": page_count,  # Added page count
+                "subcategories": subcategories_data  # Added subcategories
+            })
+        
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": f"Failed to load content categories: {str(e)}"}), 500
 

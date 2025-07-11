@@ -181,6 +181,11 @@ def serve_events_fix_v4():
 def serve_event_modal_fix():
     return send_from_directory(basedir, "event-modal-fix.js")
 
+# Meeting Page Fixes JS
+@app.route("/meeting-page-dates.js")
+def serve_meeting_page_dates():
+    return send_from_directory(basedir, "meeting_page_dates.js")
+
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
     try:
@@ -566,14 +571,23 @@ def get_meetings_by_type(type_name):
                 summary = {
                     "file_url": safe_string(m.summary_url),
                     "title": "Meeting Summary",
-                    "description": ""
+                    "description": "",
+                    "button_text": "View Summary"
+                }
+            else:
+                # Provide summary object even when no URL, with custom button text
+                summary = {
+                    "file_url": None,
+                    "title": "Meeting Summary",
+                    "description": "",
+                    "button_text": "Summary Page Unavailable"
                 }
             
             return {
                 "id": m.id,
                 "title": safe_string(m.title),
-                "date": format_date_with_comma(m.meeting_date),  # Use formatted date with comma
-                "date_formatted": format_date_with_comma(m.meeting_date),  # Keep for compatibility
+                "date": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,  # Revert to DD/MM/YYYY
+                "date_formatted": format_date_with_comma(m.meeting_date),  # Keep formatted version
                 "date_raw": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,  # Raw date for processing
                 "time": str(m.meeting_time)[:5] if m.meeting_time else "",
                 "location": safe_string(m.location),

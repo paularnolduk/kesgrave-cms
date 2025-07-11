@@ -1,7 +1,7 @@
 (function() {
     'use strict';
     
-    console.log('Meeting page fixes loading...');
+    console.log('Meeting page fixes + breadcrumb fixes loading...');
     
     // Fix date formatting to add comma
     function fixDateFormatting() {
@@ -83,30 +83,82 @@
         });
     }
     
-    // Apply fixes when page loads
-    function applyFixes() {
-        console.log('Applying meeting page fixes...');
+    // NEW: Fix breadcrumb category links
+    function fixBreadcrumbLinks() {
+        console.log('Looking for breadcrumb links to fix...');
+        
+        // Find all breadcrumb links that go to /content/category-name
+        const breadcrumbLinks = document.querySelectorAll('nav a[href^="/content/"]');
+        let breadcrumbsFixed = 0;
+        
+        breadcrumbLinks.forEach(link => {
+            const href = link.getAttribute('href');
+            
+            // Skip the main /content link, only fix category-specific ones
+            if (href !== '/content' && href.includes('/content/')) {
+                // Extract category info from the link text and convert to anchor
+                const categoryName = link.textContent.trim();
+                
+                // Map category names to their section IDs (based on content hub structure)
+                const categoryMap = {
+                    'Financial Information': 'category-5',
+                    'Policies and Important Documents': 'category-1', 
+                    'Business Plan': 'category-7',
+                    'Council Information': 'category-2',
+                    'Reporting Problems': 'category-4'
+                    // Add more categories as they are discovered
+                };
+                
+                if (categoryMap[categoryName]) {
+                    const newHref = `/content#${categoryMap[categoryName]}`;
+                    link.setAttribute('href', newHref);
+                    breadcrumbsFixed++;
+                    console.log(`Fixed breadcrumb: "${categoryName}" -> ${newHref}`);
+                } else {
+                    // For unknown categories, try to extract ID from current URL pattern
+                    // Look for patterns like /content/financial-information and convert to anchor
+                    const urlParts = href.split('/');
+                    const categorySlug = urlParts[urlParts.length - 1];
+                    
+                    // Try to guess the category ID based on common patterns
+                    if (categorySlug) {
+                        // For now, just redirect to main content page
+                        link.setAttribute('href', '/content');
+                        console.log(`Fixed unknown category breadcrumb: "${categoryName}" -> /content`);
+                        breadcrumbsFixed++;
+                    }
+                }
+            }
+        });
+        
+        console.log('Total breadcrumb links fixed:', breadcrumbsFixed);
+    }
+    
+    // Apply all fixes when page loads
+    function applyAllFixes() {
+        console.log('Applying all page fixes...');
         fixDateFormatting();
         fixSummaryButtons();
-        console.log('Meeting page fixes applied');
+        fixBreadcrumbLinks();
+        console.log('All page fixes applied');
     }
     
     // Run fixes on page load
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', applyFixes);
+        document.addEventListener('DOMContentLoaded', applyAllFixes);
     } else {
-        applyFixes();
+        applyAllFixes();
     }
     
     // Also run fixes after delays to catch dynamically loaded content
     setTimeout(() => {
         console.log('Running delayed fixes (1s)...');
-        applyFixes();
+        applyAllFixes();
     }, 1000);
     
     setTimeout(() => {
         console.log('Running delayed fixes (3s)...');
-        applyFixes();
+        applyAllFixes();
     }, 3000);
     
     // Set up a mutation observer to catch dynamic content changes
@@ -121,7 +173,7 @@
         
         if (shouldApplyFixes) {
             console.log('Content changed, applying fixes...');
-            setTimeout(applyFixes, 100);
+            setTimeout(applyAllFixes, 100);
         }
     });
     
@@ -130,5 +182,5 @@
         subtree: true
     });
     
-    console.log('Meeting page fixes initialized with mutation observer');
+    console.log('Meeting page fixes + breadcrumb fixes initialized with mutation observer');
 })();

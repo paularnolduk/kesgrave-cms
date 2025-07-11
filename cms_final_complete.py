@@ -1,5 +1,7 @@
 import os
 import sqlite3
+import json
+import re
 from flask import Flask, send_from_directory, jsonify, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -68,6 +70,62 @@ def safe_string(value):
 def safe_getattr(obj, attr, default=""):
     """Safely get attribute with default value"""
     return getattr(obj, attr, default) if hasattr(obj, attr) else default
+
+def process_social_links(social_links_str):
+    """
+    Process social_links JSON string and return valid links only.
+    Returns empty list if no valid links found (to hide section).
+    """
+    if not social_links_str or social_links_str.strip() == '':
+        return []
+    
+    try:
+        # Parse JSON string
+        links = json.loads(social_links_str)
+        
+        if not isinstance(links, dict):
+            return []
+        
+        valid_links = []
+        
+        # Define placeholder URLs that should be filtered out
+        placeholder_patterns = [
+            r'^https?://twitter\.com/?$',
+            r'^https?://x\.com/?$', 
+            r'^https?://linkedin\.com/?$',
+            r'^https?://www\.linkedin\.com/?$',
+            r'^https?://facebook\.com/?$',
+            r'^https?://www\.facebook\.com/?$',
+            r'^https?://instagram\.com/?$',
+            r'^https?://www\.instagram\.com/?$'
+        ]
+        
+        for platform, url in links.items():
+            if not url or not isinstance(url, str):
+                continue
+                
+            url = url.strip()
+            
+            # Skip empty URLs
+            if not url:
+                continue
+            
+            # Skip placeholder URLs
+            is_placeholder = any(re.match(pattern, url, re.IGNORECASE) for pattern in placeholder_patterns)
+            if is_placeholder:
+                continue
+            
+            # Add valid link
+            valid_links.append({
+                'platform': platform,
+                'url': url
+            })
+        
+        return valid_links
+        
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        # If JSON parsing fails, return empty list
+        return []
 
 # Test database connection
 try:
@@ -221,6 +279,9 @@ def get_councillors():
             if c.image_filename:
                 image_url = f"/uploads/councillors/{c.image_filename}"
             
+            # Process social links - FIXED
+            processed_social_links = process_social_links(safe_getattr(c, 'social_links', ''))
+            
             result.append({
                 "id": c.id,
                 "name": safe_string(c.name),
@@ -231,6 +292,7 @@ def get_councillors():
                 "intro": safe_string(safe_getattr(c, 'intro', '')),
                 "bio": safe_string(safe_getattr(c, 'bio', '')),
                 "image_url": image_url,
+                "social_links": processed_social_links,
                 "tags": [{
                     "id": tag.id,
                     "name": safe_string(tag.name),
@@ -260,6 +322,9 @@ def get_councillor_detail(councillor_id):
         if councillor.image_filename:
             image_url = f"/uploads/councillors/{councillor.image_filename}"
         
+        # Process social links - FIXED
+        processed_social_links = process_social_links(safe_getattr(councillor, 'social_links', ''))
+        
         return jsonify({
             "id": councillor.id,
             "name": safe_string(councillor.name),
@@ -273,7 +338,7 @@ def get_councillor_detail(councillor_id):
             "qualifications": safe_string(safe_getattr(councillor, 'qualifications', '')),
             "image": image_url,
             "image_url": image_url,
-            "social_links": safe_string(safe_getattr(councillor, 'social_links', '')),
+            "social_links": processed_social_links,
             "tags": [{
                 "id": tag.id,
                 "name": safe_string(tag.name),

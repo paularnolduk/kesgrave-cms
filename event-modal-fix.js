@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (unified text container version)');
+    console.log('🔧 Event modal fix script loaded (clean layout version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -168,7 +168,7 @@
                 if (eventData) {
                     currentEventData = eventData;
                     console.log('🖼️ Adding image to modal...');
-                    addEventImageWithUnifiedText(modal, eventData);
+                    addEventImageWithCleanText(modal, eventData);
                     console.log('📋 Adding related sections...');
                     addRelatedSections(modal, eventData);
                 } else {
@@ -185,9 +185,9 @@
         enhanceCloseButtons(modal);
     }
     
-    // Add event image with unified text container
-    function addEventImageWithUnifiedText(modal, eventData) {
-        console.log('🖼️ addEventImageWithUnifiedText called with:', eventData);
+    // Add event image with clean text layout
+    function addEventImageWithCleanText(modal, eventData) {
+        console.log('🖼️ addEventImageWithCleanText called with:', eventData);
         
         if (!eventData.image) {
             console.log('ℹ️ No image available for event, image field:', eventData.image);
@@ -223,7 +223,7 @@
             return;
         }
         
-        console.log('🖼️ Adding event image with unified text container to modal header');
+        console.log('🖼️ Adding event image with clean text layout to modal header');
         
         // Create background image overlay
         const imageOverlay = document.createElement('div');
@@ -256,7 +256,7 @@
         
         modalHeader.appendChild(imageOverlay);
         
-        // Extract text content from existing containers
+        // Extract clean text content from existing containers
         const existingContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
         let titleText = '';
         let dateText = '';
@@ -288,16 +288,15 @@
         
         console.log('📝 Extracted text:', { titleText, dateText, timeText });
         
-        // Create unified text container
+        // Create unified text container with clean layout
         const unifiedContainer = document.createElement('div');
         unifiedContainer.className = 'event-modal-unified-text-container';
         
-        // Create proper HTML structure with better spacing
+        // Create clean HTML structure - title and date/time on separate lines
         unifiedContainer.innerHTML = `
-            <h1 style="margin: 0 0 12px 0; font-size: 2rem; font-weight: 700; line-height: 1.2;">${titleText}</h1>
-            <div style="display: flex; align-items: center; gap: 20px; font-size: 1rem; opacity: 0.95; flex-wrap: wrap;">
-                ${dateText ? `<span style="display: flex; align-items: center; gap: 6px;">📅 ${dateText}</span>` : ''}
-                ${timeText ? `<span style="display: flex; align-items: center; gap: 6px;">🕐 ${timeText}</span>` : ''}
+            <h1 style="margin: 0 0 8px 0; font-size: 2rem; font-weight: 700; line-height: 1.2;">${titleText}</h1>
+            <div style="font-size: 1rem; opacity: 0.95; line-height: 1.4;">
+                ${dateText}${timeText ? ` • ${timeText}` : ''}
             </div>
         `;
         
@@ -350,7 +349,7 @@
             console.log('✅ Added featured badge');
         }
         
-        console.log('✅ Successfully added image with unified text container to modal');
+        console.log('✅ Successfully added image with clean text layout to modal');
     }
     
     // Add related sections (simplified for debugging)

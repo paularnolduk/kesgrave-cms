@@ -6,7 +6,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Event modal fix script loaded (bottom text version)');
+    console.log('🔧 Event modal fix script loaded (text area gradient version)');
     
     let currentEventData = null;
     let escapeHandler = null;
@@ -168,7 +168,7 @@
                 if (eventData) {
                     currentEventData = eventData;
                     console.log('🖼️ Adding image to modal...');
-                    addEventImageWithBottomText(modal, eventData);
+                    addEventImageWithTextAreaGradient(modal, eventData);
                     console.log('📋 Adding related sections...');
                     addRelatedSections(modal, eventData);
                 } else {
@@ -185,9 +185,9 @@
         enhanceCloseButtons(modal);
     }
     
-    // Add event image with bottom-aligned text and single overlay
-    function addEventImageWithBottomText(modal, eventData) {
-        console.log('🖼️ addEventImageWithBottomText called with:', eventData);
+    // Add event image with precise text-area gradient
+    function addEventImageWithTextAreaGradient(modal, eventData) {
+        console.log('🖼️ addEventImageWithTextAreaGradient called with:', eventData);
         
         if (!eventData.image) {
             console.log('ℹ️ No image available for event, image field:', eventData.image);
@@ -223,7 +223,7 @@
             return;
         }
         
-        console.log('🖼️ Adding event image with bottom text to modal header');
+        console.log('🖼️ Adding event image with text-area gradient to modal header');
         
         // Create background image overlay
         const imageOverlay = document.createElement('div');
@@ -256,38 +256,36 @@
         
         modalHeader.appendChild(imageOverlay);
         
-        // Move text containers to bottom
+        // Move text containers to bottom and apply precise gradient
         const textContainers = modalHeader.querySelectorAll('.event-modal-overlay, .event-modal-header-content');
         textContainers.forEach((container, index) => {
-            console.log(`📝 Moving text container ${index + 1} to bottom`);
+            console.log(`📝 Applying text-area gradient to container ${index + 1}`);
             
             // Position text at bottom
             container.style.position = 'absolute';
             container.style.top = 'auto';
-            container.style.bottom = '0';
-            container.style.left = '0';
-            container.style.right = '0';
+            container.style.bottom = '20px';
+            container.style.left = '20px';
+            container.style.right = 'auto';
             container.style.zIndex = '3';
-            container.style.padding = '20px';
+            
+            // Apply gradient background directly to the text container (precise area only)
+            container.style.background = 'linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.5))';
+            container.style.borderRadius = '12px';
+            container.style.backdropFilter = 'blur(2px)';
+            container.style.padding = '16px 20px';
+            container.style.margin = '0';
+            container.style.width = 'fit-content';
+            container.style.maxWidth = '80%';
+            
+            // Ensure text is white and visible
+            container.style.color = 'white';
+            const textElements = container.querySelectorAll('*');
+            textElements.forEach(el => {
+                el.style.color = 'white';
+                el.style.textShadow = '0 1px 2px rgba(0,0,0,0.5)';
+            });
         });
-        
-        // Create single bottom overlay for text readability
-        const bottomOverlay = document.createElement('div');
-        bottomOverlay.className = 'event-modal-bottom-overlay-enhancement';
-        bottomOverlay.style.cssText = `
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 100px;
-            background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
-            z-index: 2;
-            pointer-events: none;
-            border-radius: inherit;
-        `;
-        
-        modalHeader.appendChild(bottomOverlay);
-        console.log('✅ Added bottom overlay for text');
         
         // Add featured badge if applicable (highest layer)
         if (eventData.featured) {
@@ -313,7 +311,7 @@
             console.log('✅ Added featured badge');
         }
         
-        console.log('✅ Successfully added image with bottom-aligned text to modal');
+        console.log('✅ Successfully added image with text-area gradient to modal');
     }
     
     // Add related sections (simplified for debugging)

@@ -168,8 +168,8 @@ def get_homepage_slides():
 
 # Events Image JS
 @app.route("/events-fix.js")
-def serve_events_fix():
-    return send_from_directory(basedir, "events_fix_updated.js")
+def serve_events-fix():
+    return send_from_directory(basedir, "events-fix.js")
 
 @app.route("/events-fix-v2.js")
 def serve_events_fix_v2():

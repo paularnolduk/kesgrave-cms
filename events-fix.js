@@ -7,7 +7,7 @@
 (function() {
     'use strict';
     
-    console.log('🔧 Events fix script loaded');
+    console.log('🔧 Updated Events fix script loaded');
     
     // Wait for DOM to be ready
     function waitForDOM() {
@@ -20,14 +20,21 @@
         });
     }
     
-    // Wait for events to be rendered
+    // Wait for events to be rendered - updated selectors
     function waitForEvents() {
         return new Promise((resolve) => {
             const checkEvents = () => {
-                const events = document.querySelectorAll('.event-card, .event-item, [class*="event"]');
-                if (events.length > 0) {
-                    console.log('✅ Found', events.length, 'event elements');
-                    resolve(events);
+                // Look for article elements or any elements containing event content
+                const events = document.querySelectorAll('article, .event-card, .event-item, [class*="event"]');
+                const eventArticles = Array.from(events).filter(el => {
+                    const text = el.textContent || '';
+                    return text.includes('July 2025') || text.includes('View Details') || 
+                           text.includes('Annual Summer Fair') || text.includes('Kesgrave Market');
+                });
+                
+                if (eventArticles.length > 0) {
+                    console.log('✅ Found', eventArticles.length, 'event elements');
+                    resolve(eventArticles);
                 } else {
                     console.log('⏳ Waiting for events...');
                     setTimeout(checkEvents, 100);
@@ -37,39 +44,25 @@
         });
     }
     
-    // Fetch events data from API
+    // Fetch events data from the NEW API endpoint
     async function fetchEventsData() {
         try {
-            console.log('📡 Fetching events data...');
-            const response = await fetch('/api/homepage/events');
+            console.log('📡 Fetching events data from /api/events...');
+            const response = await fetch('/api/events');
             const data = await response.json();
-            console.log('✅ Events data loaded:', data.length, 'events');
-            return data;
+            console.log('✅ Events data loaded:', data.events.length, 'events');
+            return data.events; // Return the events array from the response
         } catch (error) {
             console.error('❌ Failed to fetch events data:', error);
             return [];
         }
     }
     
-    // Fetch event categories data
-    async function fetchEventCategories() {
-        try {
-            console.log('📡 Fetching event categories...');
-            const response = await fetch('/api/event-categories');
-            const data = await response.json();
-            console.log('✅ Event categories loaded:', data.length, 'categories');
-            return data;
-        } catch (error) {
-            console.error('❌ Failed to fetch event categories:', error);
-            return [];
-        }
-    }
-    
     // Apply event data to DOM elements
-    function applyEventData(eventElements, eventsData, categories) {
+    function applyEventData(eventElements, eventsData) {
         console.log('🎨 Applying event data to DOM...');
         
-        // Try to match events by title or content
+        // Try to match events by title
         eventElements.forEach((eventElement, index) => {
             const eventData = eventsData[index];
             if (!eventData) {
@@ -92,6 +85,7 @@
                     border-radius: 8px;
                     overflow: hidden;
                     margin-bottom: 1rem;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 `;
                 eventElement.insertBefore(imageContainer, eventElement.firstChild);
             }
@@ -105,31 +99,20 @@
                 imageContainer.style.backgroundRepeat = 'no-repeat';
                 console.log(`✅ Set background image for event ${index + 1}:`, imageUrl);
                 
-                // Add category tags if available
-                if (eventData.category_id && categories.length > 0) {
-                    const category = categories.find(cat => cat.id === eventData.category_id);
-                    if (category) {
-                        addCategoryTag(imageContainer, category);
-                    }
+                // Add grayscale filter for past events
+                if (eventData.is_past) {
+                    imageContainer.style.filter = 'grayscale(100%)';
+                    addPastEventBadge(imageContainer);
                 }
                 
-                // If no specific category, add a default tag based on event type
-                if (!eventData.category_id) {
-                    // Determine category based on title or description
-                    let defaultCategory = null;
-                    const title = eventData.title.toLowerCase();
-                    
-                    if (title.includes('meeting') || title.includes('council')) {
-                        defaultCategory = { name: 'Council Meeting', color: '#3498db', icon: 'fas fa-gavel' };
-                    } else if (title.includes('market') || title.includes('fair')) {
-                        defaultCategory = { name: 'Community Event', color: '#e74c3c', icon: 'fas fa-users' };
-                    } else if (title.includes('sport') || title.includes('fun') || title.includes('fireworks')) {
-                        defaultCategory = { name: 'Recreation', color: '#2ecc71', icon: 'fas fa-star' };
-                    }
-                    
-                    if (defaultCategory) {
-                        addCategoryTag(imageContainer, defaultCategory);
-                    }
+                // Add category tags if available
+                if (eventData.category) {
+                    addCategoryTag(imageContainer, eventData.category);
+                }
+                
+                // Add featured tag if featured
+                if (eventData.featured) {
+                    addFeaturedTag(imageContainer);
                 }
             }
         });
@@ -170,20 +153,67 @@
         console.log(`✅ Added category tag: ${category.name}`);
     }
     
+    // Add featured tag
+    function addFeaturedTag(container) {
+        const tag = document.createElement('div');
+        tag.className = 'event-featured-tag';
+        tag.textContent = 'FEATURED';
+        tag.style.cssText = `
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background-color: #f39c12;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 10;
+        `;
+        
+        container.appendChild(tag);
+        console.log('✅ Added featured tag');
+    }
+    
+    // Add past event badge
+    function addPastEventBadge(container) {
+        const badge = document.createElement('div');
+        badge.className = 'event-past-badge';
+        badge.textContent = 'Past Event';
+        badge.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            z-index: 15;
+        `;
+        
+        container.appendChild(badge);
+        console.log('✅ Added past event badge');
+    }
+    
     // Main function
     async function fixEvents() {
         try {
-            console.log('🚀 Starting events fix...');
+            console.log('🚀 Starting updated events fix...');
             
             // Wait for DOM and events
             await waitForDOM();
             const eventElements = await waitForEvents();
             
-            // Fetch events data and categories
-            const [eventsData, categories] = await Promise.all([
-                fetchEventsData(),
-                fetchEventCategories()
-            ]);
+            // Fetch events data from the new API
+            const eventsData = await fetchEventsData();
             
             if (eventsData.length === 0) {
                 console.error('❌ No events data available');
@@ -191,7 +221,7 @@
             }
             
             // Apply the fix
-            applyEventData(eventElements, eventsData, categories);
+            applyEventData(eventElements, eventsData);
             
         } catch (error) {
             console.error('❌ Events fix failed:', error);
@@ -206,6 +236,31 @@
         if (!document.hidden) {
             setTimeout(fixEvents, 500);
         }
+    });
+    
+    // Run fix when navigating between months
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                // Check if new event elements were added
+                const hasEventContent = Array.from(mutation.addedNodes).some(node => {
+                    return node.nodeType === 1 && (
+                        node.tagName === 'ARTICLE' || 
+                        node.textContent?.includes('View Details')
+                    );
+                });
+                
+                if (hasEventContent) {
+                    console.log('🔄 New events detected, re-running fix...');
+                    setTimeout(fixEvents, 500);
+                }
+            }
+        });
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
     });
     
 })();

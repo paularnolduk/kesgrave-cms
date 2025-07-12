@@ -190,7 +190,7 @@ def serve_event_modal_fix():
 # Meeting Page Fixes JS (with enhanced breadcrumbs)
 @app.route("/meeting-page-dates.js")
 def serve_meeting_page_dates():
-    return send_from_directory(basedir, "meeting_page_dates.js")
+    return send_from_directory(basedir, "meeting_page_dates_final.js")
 
 @app.route('/api/homepage/quick-links')
 def get_quick_links():
@@ -268,6 +268,107 @@ def get_events():
             "image": f"/uploads/events/{safe_string(e.image_filename)}" if e.image_filename else "",
             "featured": bool(getattr(e, 'featured', False))  # ✅ ADDED FEATURED FIELD
         } for e in limited_events])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
+
+@app.route('/api/events')
+def get_all_events():
+    """Get events with filtering support for the events page"""
+    try:
+        init_models()
+        
+        # Get query parameters
+        year = request.args.get('year', type=int)
+        month = request.args.get('month', type=int)
+        category_id = request.args.get('category', type=int)
+        include_past = request.args.get('include_past', 'false').lower() == 'true'
+        
+        # Base query
+        query = db.session.query(Event).filter(Event.is_published == True)
+        
+        # Date filtering
+        if year and month:
+            # Get events for specific month/year
+            start_date = datetime(year, month, 1)
+            if month == 12:
+                end_date = datetime(year + 1, 1, 1)
+            else:
+                end_date = datetime(year, month + 1, 1)
+            query = query.filter(Event.start_date >= start_date, Event.start_date < end_date)
+        elif not include_past:
+            # Only future events if not specifically including past
+            now = datetime.now()
+            query = query.filter(Event.start_date >= now)
+        
+        # Category filtering
+        if category_id:
+            query = query.filter(Event.category_id == category_id)
+        
+        # Get events with category information
+        events = query.order_by(Event.start_date).all()
+        
+        # Build response with category information
+        result = []
+        for event in events:
+            # Get category information
+            category = None
+            if event.category_id:
+                category = db.session.query(EventCategory).filter(EventCategory.id == event.category_id).first()
+            
+            # Determine if event is in the past
+            now = datetime.now()
+            is_past = event.start_date < now
+            
+            event_data = {
+                "id": event.id,
+                "title": safe_string(event.title),
+                "description": safe_string(event.description),
+                "short_description": safe_string(event.short_description),
+                "start_date": event.start_date.isoformat() if event.start_date else None,
+                "end_date": event.end_date.isoformat() if event.end_date else None,
+                "all_day": event.all_day,
+                "location_name": safe_string(event.location_name),
+                "location_address": safe_string(event.location_address),
+                "location_url": safe_string(event.location_url),
+                "contact_name": safe_string(event.contact_name),
+                "contact_email": safe_string(event.contact_email),
+                "contact_phone": safe_string(event.contact_phone),
+                "booking_required": event.booking_required,
+                "booking_url": safe_string(event.booking_url),
+                "max_attendees": event.max_attendees,
+                "is_free": event.is_free,
+                "price": safe_string(event.price),
+                "image": f"/uploads/events/{safe_string(event.image_filename)}" if event.image_filename else "",
+                "featured": event.featured,
+                "status": safe_string(event.status),
+                "is_past": is_past,
+                "category": {
+                    "id": category.id,
+                    "name": safe_string(category.name),
+                    "color": safe_string(category.color),
+                    "icon": safe_string(category.icon)
+                } if category else None,
+                # Legacy format for compatibility
+                "date": event.start_date.strftime('%a, %d %b %Y %H:%M:%S GMT') if event.start_date else "",
+                "location": safe_string(event.location_name)
+            }
+            
+            result.append(event_data)
+        
+        # Add metadata
+        response = {
+            "events": result,
+            "total": len(result),
+            "filters": {
+                "year": year,
+                "month": month,
+                "category_id": category_id,
+                "include_past": include_past
+            }
+        }
+        
+        return jsonify(response)
+        
     except Exception as e:
         return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 

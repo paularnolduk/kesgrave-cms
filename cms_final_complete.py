@@ -167,6 +167,10 @@ def get_homepage_slides():
         return jsonify({"error": f"Failed to load slides: {str(e)}"}), 500
 
 # Events Image JS
+@app.route("/events-fix.js")
+def serve_events_fix_main():
+    return send_from_directory(basedir, "events-fix.js")
+
 @app.route("/events-fix-4.js")
 def serve_events_fix():
     return send_from_directory(basedir, "events_fix_final.js")

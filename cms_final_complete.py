@@ -171,22 +171,6 @@ def get_homepage_slides():
 def serve_events_fix_main():
     return send_from_directory(basedir, "events-fix.js")
 
-@app.route("/events-fix-4.js")
-def serve_events_fix():
-    return send_from_directory(basedir, "events_fix_final.js")
-
-@app.route("/events-fix-v2.js")
-def serve_events_fix_v2():
-    return send_from_directory(basedir, "events-fix-v2.js")
-
-@app.route("/events-fix-v3.js")
-def serve_events_fix_v3():
-    return send_from_directory(basedir, "events-fix-v3.js")
-
-@app.route("/events-fix-v4.js")
-def serve_events_fix_v4():
-    return send_from_directory(basedir, "events-fix-v4.js")
-
 @app.route("/event-modal-fix.js")
 def serve_event_modal_fix():
     return send_from_directory(basedir, "event-modal-fix.js")

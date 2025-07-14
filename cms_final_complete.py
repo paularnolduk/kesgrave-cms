@@ -166,10 +166,10 @@ def get_homepage_slides():
     except Exception as e:
         return jsonify({"error": f"Failed to load slides: {str(e)}"}), 500
 
-# Events Image JS
+# Events Image JS - Final Version 5
 @app.route("/events-fix.js")
 def serve_events_fix_main():
-    return send_from_directory(basedir, "events-fix.js")
+    return send_from_directory(basedir, "events-fix-final-v5.js")
 
 @app.route("/event-modal-fix.js")
 def serve_event_modal_fix():

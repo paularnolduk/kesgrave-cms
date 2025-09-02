@@ -179,7 +179,7 @@ def admin_login():
         else:
             flash('Invalid username or password!', 'error')
     
-    return render_template_string('''
+    login_template = '''
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -218,7 +218,7 @@ def admin_login():
                 <p class="mb-0">Content Management System</p>
             </div>
             <div class="p-4">
-                {% with messages = get_flashed_messages(with_categories=true) %}
+                ''' + '''{% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
                             <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
@@ -227,7 +227,7 @@ def admin_login():
                             </div>
                         {% endfor %}
                     {% endif %}
-                {% endwith %}
+                {% endwith %}''' + '''
                 
                 <form method="POST">
                     <div class="mb-3">
@@ -251,7 +251,9 @@ def admin_login():
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     </body>
     </html>
-    ''')
+    '''
+    
+    return render_template_string(login_template)
 
 @app.route('/cms/logout')
 @login_required
@@ -262,18 +264,29 @@ def admin_logout():
 
 # Common admin layout
 def get_admin_layout(title, content, active_page=""):
-    return f'''
+    flash_messages = '''{% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}'''
+    
+    return '''
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{title} - Kesgrave CMS</title>
+        <title>''' + title + ''' - Kesgrave CMS</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
         <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
         <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
         <style>
-            .sidebar {{
+            .sidebar {
                 position: fixed;
                 top: 0;
                 left: 0;
@@ -283,49 +296,49 @@ def get_admin_layout(title, content, active_page=""):
                 color: white;
                 z-index: 1000;
                 overflow-y: auto;
-            }}
-            .sidebar .nav-link {{
+            }
+            .sidebar .nav-link {
                 color: rgba(255,255,255,0.8);
                 padding: 0.75rem 1.5rem;
                 display: flex;
                 align-items: center;
                 text-decoration: none;
                 transition: all 0.3s ease;
-            }}
-            .sidebar .nav-link:hover {{
+            }
+            .sidebar .nav-link:hover {
                 background: rgba(255,255,255,0.1);
                 color: white;
-            }}
-            .sidebar .nav-link.active {{
+            }
+            .sidebar .nav-link.active {
                 background: rgba(255,255,255,0.2);
                 color: white;
-            }}
-            .sidebar .nav-link i {{
+            }
+            .sidebar .nav-link i {
                 margin-right: 0.75rem;
                 width: 20px;
-            }}
-            .main-content {{
+            }
+            .main-content {
                 margin-left: 260px;
                 padding: 2rem;
                 min-height: 100vh;
                 background: #f8f9fa;
-            }}
-            .card {{
+            }
+            .card {
                 border: none;
                 box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }}
-            .alert {{
+            }
+            .alert {
                 border: none;
                 border-radius: 10px;
-            }}
-            @media (max-width: 768px) {{
-                .sidebar {{
+            }
+            @media (max-width: 768px) {
+                .sidebar {
                     transform: translateX(-100%);
-                }}
-                .main-content {{
+                }
+                .main-content {
                     margin-left: 0;
-                }}
-            }}
+                }
+            }
         </style>
     </head>
     <body>
@@ -335,27 +348,27 @@ def get_admin_layout(title, content, active_page=""):
                 <small>Content Management</small>
             </div>
             <nav class="nav flex-column">
-                <a class="nav-link {'active' if active_page == 'dashboard' else ''}" href="/cms/dashboard">
+                <a class="nav-link ''' + ('active' if active_page == 'dashboard' else '') + '''" href="/cms/dashboard">
                     <i class="fas fa-tachometer-alt"></i>
                     Dashboard
                 </a>
-                <a class="nav-link {'active' if active_page == 'slides' else ''}" href="/cms/slides">
+                <a class="nav-link ''' + ('active' if active_page == 'slides' else '') + '''" href="/cms/slides">
                     <i class="fas fa-images"></i>
                     Homepage Slides
                 </a>
-                <a class="nav-link {'active' if active_page == 'councillors' else ''}" href="/cms/councillors">
+                <a class="nav-link ''' + ('active' if active_page == 'councillors' else '') + '''" href="/cms/councillors">
                     <i class="fas fa-users"></i>
                     Councillors
                 </a>
-                <a class="nav-link {'active' if active_page == 'events' else ''}" href="/cms/events">
+                <a class="nav-link ''' + ('active' if active_page == 'events' else '') + '''" href="/cms/events">
                     <i class="fas fa-calendar-alt"></i>
                     Events
                 </a>
-                <a class="nav-link {'active' if active_page == 'meetings' else ''}" href="/cms/meetings">
+                <a class="nav-link ''' + ('active' if active_page == 'meetings' else '') + '''" href="/cms/meetings">
                     <i class="fas fa-gavel"></i>
                     Meetings
                 </a>
-                <a class="nav-link {'active' if active_page == 'content' else ''}" href="/cms/content">
+                <a class="nav-link ''' + ('active' if active_page == 'content' else '') + '''" href="/cms/content">
                     <i class="fas fa-file-alt"></i>
                     Content Pages
                 </a>
@@ -373,18 +386,9 @@ def get_admin_layout(title, content, active_page=""):
         </div>
         
         <div class="main-content">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
+            ''' + flash_messages + '''
             
-            {content}
+            ''' + content + '''
         </div>
         
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -413,11 +417,11 @@ def admin_dashboard():
         published_content = len(execute_query("SELECT * FROM content_page WHERE is_published = 1") or [])
         draft_content = content_count - published_content
         
-        content = f'''
+        content = '''
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>CMS Dashboard</h1>
             <div class="text-muted">
-                <i class="fas fa-user"></i> Welcome, {current_user.username}
+                <i class="fas fa-user"></i> Welcome, ''' + current_user.username + '''
             </div>
         </div>
         
@@ -427,7 +431,7 @@ def admin_dashboard():
                 <div class="card text-center">
                     <div class="card-body">
                         <i class="fas fa-images fa-2x text-primary mb-2"></i>
-                        <h3 class="text-primary">{slide_count}</h3>
+                        <h3 class="text-primary">''' + str(slide_count) + '''</h3>
                         <p class="mb-0">Slides</p>
                     </div>
                 </div>
@@ -436,7 +440,7 @@ def admin_dashboard():
                 <div class="card text-center">
                     <div class="card-body">
                         <i class="fas fa-users fa-2x text-success mb-2"></i>
-                        <h3 class="text-success">{councillor_count}</h3>
+                        <h3 class="text-success">''' + str(councillor_count) + '''</h3>
                         <p class="mb-0">Councillors</p>
                     </div>
                 </div>
@@ -445,7 +449,7 @@ def admin_dashboard():
                 <div class="card text-center">
                     <div class="card-body">
                         <i class="fas fa-calendar-alt fa-2x text-info mb-2"></i>
-                        <h3 class="text-info">{event_count}</h3>
+                        <h3 class="text-info">''' + str(event_count) + '''</h3>
                         <p class="mb-0">Events</p>
                     </div>
                 </div>
@@ -454,7 +458,7 @@ def admin_dashboard():
                 <div class="card text-center">
                     <div class="card-body">
                         <i class="fas fa-gavel fa-2x text-warning mb-2"></i>
-                        <h3 class="text-warning">{meeting_count}</h3>
+                        <h3 class="text-warning">''' + str(meeting_count) + '''</h3>
                         <p class="mb-0">Meetings</p>
                     </div>
                 </div>
@@ -463,7 +467,7 @@ def admin_dashboard():
                 <div class="card text-center">
                     <div class="card-body">
                         <i class="fas fa-file-alt fa-2x text-secondary mb-2"></i>
-                        <h3 class="text-secondary">{content_count}</h3>
+                        <h3 class="text-secondary">''' + str(content_count) + '''</h3>
                         <p class="mb-0">Pages</p>
                     </div>
                 </div>
@@ -472,7 +476,7 @@ def admin_dashboard():
                 <div class="card text-center">
                     <div class="card-body">
                         <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
-                        <h3 class="text-success">{published_content}</h3>
+                        <h3 class="text-success">''' + str(published_content) + '''</h3>
                         <p class="mb-0">Published</p>
                     </div>
                 </div>
@@ -490,19 +494,19 @@ def admin_dashboard():
                         <div class="row">
                             <div class="col-6">
                                 <div class="text-center">
-                                    <h4 class="text-success">{published_content}</h4>
+                                    <h4 class="text-success">''' + str(published_content) + '''</h4>
                                     <p class="text-muted">Published Pages</p>
                                 </div>
                             </div>
                             <div class="col-6">
                                 <div class="text-center">
-                                    <h4 class="text-warning">{draft_content}</h4>
+                                    <h4 class="text-warning">''' + str(draft_content) + '''</h4>
                                     <p class="text-muted">Draft Pages</p>
                                 </div>
                             </div>
                         </div>
                         <div class="progress">
-                            <div class="progress-bar bg-success" style="width: {(published_content / max(content_count, 1)) * 100}%"></div>
+                            <div class="progress-bar bg-success" style="width: ''' + str((published_content / max(content_count, 1)) * 100) + '''%"></div>
                         </div>
                     </div>
                 </div>
@@ -533,33 +537,6 @@ def admin_dashboard():
             </div>
         </div>
         
-        <!-- Recent Activity -->
-        <div class="row">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">Recent Events</h5>
-                    </div>
-                    <div class="card-body">
-                        {'<p class="text-muted">No recent events</p>' if not recent_events else ''.join([f'<div class="d-flex justify-content-between align-items-center mb-2"><span>{event["title"] if "title" in event.keys() else "Event"}</span><small class="text-muted">{event["date"] if "date" in event.keys() else ""}</small></div>' for event in recent_events[:3]])}
-                        <a href="/cms/events" class="btn btn-sm btn-outline-primary">View All Events</a>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">Recent Meetings</h5>
-                    </div>
-                    <div class="card-body">
-                        {'<p class="text-muted">No recent meetings</p>' if not recent_meetings else ''.join([f'<div class="d-flex justify-content-between align-items-center mb-2"><span>{meeting["title"] if "title" in meeting.keys() else "Meeting"}</span><small class="text-muted">{meeting["meeting_date"] if "meeting_date" in meeting.keys() else ""}</small></div>' for meeting in recent_meetings[:3]])}
-                        <a href="/cms/meetings" class="btn btn-sm btn-outline-warning">View All Meetings</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
         <!-- System Status -->
         <div class="row mt-4">
             <div class="col-12">
@@ -570,12 +547,12 @@ def admin_dashboard():
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-4">
-                                <p><strong>Database:</strong> {db_path}</p>
+                                <p><strong>Database:</strong> ''' + db_path + '''</p>
                                 <p><strong>Status:</strong> <span class="badge bg-success">Online</span></p>
                             </div>
                             <div class="col-md-4">
-                                <p><strong>Environment:</strong> {'Render' if os.environ.get("RENDER") else 'Local'}</p>
-                                <p><strong>Upload Path:</strong> {upload_path}</p>
+                                <p><strong>Environment:</strong> ''' + ('Render' if os.environ.get("RENDER") else 'Local') + '''</p>
+                                <p><strong>Upload Path:</strong> ''' + upload_path + '''</p>
                             </div>
                             <div class="col-md-4">
                                 <a href="/health" class="btn btn-sm btn-outline-secondary" target="_blank">
@@ -634,7 +611,7 @@ def admin_slides():
             </tr>
             '''
         
-        content = f'''
+        content = '''
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Homepage Slides</h1>
             <a href="/cms/slides/add" class="btn btn-primary">
@@ -644,27 +621,27 @@ def admin_slides():
         
         <div class="card">
             <div class="card-body">
-                {'<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Image</th><th>Title</th><th>Introduction</th><th>Button</th><th>Status</th><th>Order</th><th>Actions</th></tr></thead><tbody>' + slides_html + '</tbody></table></div>' if slides else '<div class="text-center py-5"><i class="fas fa-images fa-3x text-muted mb-3"></i><h5>No slides found</h5><p class="text-muted">Create your first homepage slide to get started.</p><a href="/cms/slides/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Slide</a></div>'}
+                ''' + ('<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Image</th><th>Title</th><th>Introduction</th><th>Button</th><th>Status</th><th>Order</th><th>Actions</th></tr></thead><tbody>' + slides_html + '</tbody></table></div>' if slides else '<div class="text-center py-5"><i class="fas fa-images fa-3x text-muted mb-3"></i><h5>No slides found</h5><p class="text-muted">Create your first homepage slide to get started.</p><a href="/cms/slides/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Slide</a></div>') + '''
             </div>
         </div>
         
         <script>
-            function deleteSlide(id) {{
-                if (confirm('Are you sure you want to delete this slide?')) {{
-                    fetch('/cms/slides/delete/' + id, {{
+            function deleteSlide(id) {
+                if (confirm('Are you sure you want to delete this slide?')) {
+                    fetch('/cms/slides/delete/' + id, {
                         method: 'POST',
-                        headers: {{
+                        headers: {
                             'Content-Type': 'application/json',
-                        }}
-                    }}).then(response => {{
-                        if (response.ok) {{
+                        }
+                    }).then(response => {
+                        if (response.ok) {
                             location.reload();
-                        }} else {{
+                        } else {
                             alert('Error deleting slide');
-                        }}
-                    }});
-                }}
-            }}
+                        }
+                    });
+                }
+            }
         </script>
         '''
         
@@ -854,7 +831,7 @@ def admin_events():
             </tr>
             '''
         
-        content = f'''
+        content = '''
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Events</h1>
             <a href="/cms/events/add" class="btn btn-primary">
@@ -864,27 +841,27 @@ def admin_events():
         
         <div class="card">
             <div class="card-body">
-                {'<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Event</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + events_html + '</tbody></table></div>' if events else '<div class="text-center py-5"><i class="fas fa-calendar-alt fa-3x text-muted mb-3"></i><h5>No events found</h5><p class="text-muted">Create your first event to get started.</p><a href="/cms/events/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Event</a></div>'}
+                ''' + ('<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Event</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + events_html + '</tbody></table></div>' if events else '<div class="text-center py-5"><i class="fas fa-calendar-alt fa-3x text-muted mb-3"></i><h5>No events found</h5><p class="text-muted">Create your first event to get started.</p><a href="/cms/events/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Event</a></div>') + '''
             </div>
         </div>
         
         <script>
-            function deleteEvent(id) {{
-                if (confirm('Are you sure you want to delete this event?')) {{
-                    fetch('/cms/events/delete/' + id, {{
+            function deleteEvent(id) {
+                if (confirm('Are you sure you want to delete this event?')) {
+                    fetch('/cms/events/delete/' + id, {
                         method: 'POST',
-                        headers: {{
+                        headers: {
                             'Content-Type': 'application/json',
-                        }}
-                    }}).then(response => {{
-                        if (response.ok) {{
+                        }
+                    }).then(response => {
+                        if (response.ok) {
                             location.reload();
-                        }} else {{
+                        } else {
                             alert('Error deleting event');
-                        }}
-                    }});
-                }}
-            }}
+                        }
+                    });
+                }
+            }
         </script>
         '''
         
@@ -1101,7 +1078,7 @@ def admin_councillors():
             </tr>
             '''
         
-        content = f'''
+        content = '''
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Councillors</h1>
             <a href="/cms/councillors/add" class="btn btn-primary">
@@ -1111,27 +1088,27 @@ def admin_councillors():
         
         <div class="card">
             <div class="card-body">
-                {'<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Councillor</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + councillors_html + '</tbody></table></div>' if councillors else '<div class="text-center py-5"><i class="fas fa-users fa-3x text-muted mb-3"></i><h5>No councillors found</h5><p class="text-muted">Add your first councillor to get started.</p><a href="/cms/councillors/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Councillor</a></div>'}
+                ''' + ('<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Councillor</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + councillors_html + '</tbody></table></div>' if councillors else '<div class="text-center py-5"><i class="fas fa-users fa-3x text-muted mb-3"></i><h5>No councillors found</h5><p class="text-muted">Add your first councillor to get started.</p><a href="/cms/councillors/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Councillor</a></div>') + '''
             </div>
         </div>
         
         <script>
-            function deleteCouncillor(id) {{
-                if (confirm('Are you sure you want to delete this councillor?')) {{
-                    fetch('/cms/councillors/delete/' + id, {{
+            function deleteCouncillor(id) {
+                if (confirm('Are you sure you want to delete this councillor?')) {
+                    fetch('/cms/councillors/delete/' + id, {
                         method: 'POST',
-                        headers: {{
+                        headers: {
                             'Content-Type': 'application/json',
-                        }}
-                    }}).then(response => {{
-                        if (response.ok) {{
+                        }
+                    }).then(response => {
+                        if (response.ok) {
                             location.reload();
-                        }} else {{
+                        } else {
                             alert('Error deleting councillor');
-                        }}
-                    }});
-                }}
-            }}
+                        }
+                    });
+                }
+            }
         </script>
         '''
         
@@ -1320,7 +1297,7 @@ def admin_meetings():
             </tr>
             '''
         
-        content = f'''
+        content = '''
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Meetings</h1>
             <a href="/cms/meetings/add" class="btn btn-primary">
@@ -1330,27 +1307,27 @@ def admin_meetings():
         
         <div class="card">
             <div class="card-body">
-                {'<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Meeting</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + meetings_html + '</tbody></table></div>' if meetings else '<div class="text-center py-5"><i class="fas fa-gavel fa-3x text-muted mb-3"></i><h5>No meetings found</h5><p class="text-muted">Schedule your first meeting to get started.</p><a href="/cms/meetings/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Meeting</a></div>'}
+                ''' + ('<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Meeting</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + meetings_html + '</tbody></table></div>' if meetings else '<div class="text-center py-5"><i class="fas fa-gavel fa-3x text-muted mb-3"></i><h5>No meetings found</h5><p class="text-muted">Schedule your first meeting to get started.</p><a href="/cms/meetings/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Meeting</a></div>') + '''
             </div>
         </div>
         
         <script>
-            function deleteMeeting(id) {{
-                if (confirm('Are you sure you want to delete this meeting?')) {{
-                    fetch('/cms/meetings/delete/' + id, {{
+            function deleteMeeting(id) {
+                if (confirm('Are you sure you want to delete this meeting?')) {
+                    fetch('/cms/meetings/delete/' + id, {
                         method: 'POST',
-                        headers: {{
+                        headers: {
                             'Content-Type': 'application/json',
-                        }}
-                    }}).then(response => {{
-                        if (response.ok) {{
+                        }
+                    }).then(response => {
+                        if (response.ok) {
                             location.reload();
-                        }} else {{
+                        } else {
                             alert('Error deleting meeting');
-                        }}
-                    }});
-                }}
-            }}
+                        }
+                    });
+                }
+            }
         </script>
         '''
         
@@ -1499,7 +1476,7 @@ def admin_content():
             </tr>
             '''
         
-        content = f'''
+        content = '''
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Content Pages</h1>
             <a href="/cms/content/add" class="btn btn-primary">
@@ -1509,27 +1486,27 @@ def admin_content():
         
         <div class="card">
             <div class="card-body">
-                {'<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Page</th><th>Excerpt</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + pages_html + '</tbody></table></div>' if content_pages else '<div class="text-center py-5"><i class="fas fa-file-alt fa-3x text-muted mb-3"></i><h5>No content pages found</h5><p class="text-muted">Create your first content page to get started.</p><a href="/cms/content/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Page</a></div>'}
+                ''' + ('<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Page</th><th>Excerpt</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + pages_html + '</tbody></table></div>' if content_pages else '<div class="text-center py-5"><i class="fas fa-file-alt fa-3x text-muted mb-3"></i><h5>No content pages found</h5><p class="text-muted">Create your first content page to get started.</p><a href="/cms/content/add" class="btn btn-primary"><i class="fas fa-plus"></i> Add First Page</a></div>') + '''
             </div>
         </div>
         
         <script>
-            function deletePage(id) {{
-                if (confirm('Are you sure you want to delete this page?')) {{
-                    fetch('/cms/content/delete/' + id, {{
+            function deletePage(id) {
+                if (confirm('Are you sure you want to delete this page?')) {
+                    fetch('/cms/content/delete/' + id, {
                         method: 'POST',
-                        headers: {{
+                        headers: {
                             'Content-Type': 'application/json',
-                        }}
-                    }}).then(response => {{
-                        if (response.ok) {{
+                        }
+                    }).then(response => {
+                        if (response.ok) {
                             location.reload();
-                        }} else {{
+                        } else {
                             alert('Error deleting page');
-                        }}
-                    }});
-                }}
-            }}
+                        }
+                    });
+                }
+            }
         </script>
         '''
         

@@ -2,44 +2,22 @@ import os
 import sqlite3
 import json
 import re
-from flask import Flask, send_from_directory, jsonify, request, redirect, url_for, render_template_string, flash
+from flask import Flask, send_from_directory, jsonify, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from sqlalchemy.ext.automap import automap_base
 from urllib.parse import unquote
 from datetime import datetime, date
-from werkzeug.utils import secure_filename
 
 app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
 
-# Configuration for Flask-Login
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'kesgrave-cms-secret-key-2025')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
-
-# Initialize Flask-Login
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'admin_login'
-
-# User class for authentication
-class AdminUser(UserMixin):
-    def __init__(self, id, username='admin'):
-        self.id = id
-        self.username = username
-
-@login_manager.user_loader
-def load_user(user_id):
-    return AdminUser(user_id)
-
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-# ORIGINAL DATABASE LOGIC (EXACTLY FROM YOUR WORKING FILE)
 if os.environ.get("RENDER"):
     tmp_db_path = "/tmp/kesgrave_working.db"
     original_path = os.path.join(basedir, "instance", "kesgrave_working.db")
-    if not os.path.exists(tmp_db_path) and os.path.exists(original_path):
+    if not os.path.exists(tmp_db_path):
         import shutil
         shutil.copyfile(original_path, tmp_db_path)
     db_path = tmp_db_path
@@ -49,594 +27,1116 @@ else:
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# Upload configuration (EXACTLY FROM YOUR WORKING FILE)
-if os.environ.get("RENDER"):
-    upload_path = "/tmp/uploads"
-else:
-    upload_path = os.path.join(basedir, "uploads")
-
-app.config['UPLOAD_FOLDER'] = upload_path
-os.makedirs(upload_path, exist_ok=True)
-
 db = SQLAlchemy(app)
 
-# ORIGINAL AUTOMAP LOGIC (EXACTLY FROM YOUR WORKING FILE)
-Base = automap_base()
+# Global variables for models
+Slide = None
+QuickLink = None
+Councillor = None
+Meeting = None
+Event = None
+ContentPage = None
+ContentCategory = None
+ContentGallery = None
+ContentDownload = None
+ContentLink = None
+MeetingType = None
+EventCategory = None
+Tag = None
+CouncillorTag = None
 
-with app.app_context():
-    Base.prepare(db.engine, reflect=True)
+def init_models():
+    """Initialize models within application context"""
+    global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, ContentGallery, ContentDownload, ContentLink, MeetingType, EventCategory, Tag, CouncillorTag
     
-    # Access tables
-    try:
-        Slide = Base.classes.slide
-    except:
-        Slide = None
-    
-    try:
-        Event = Base.classes.event
-    except:
-        Event = None
-    
-    try:
-        Meeting = Base.classes.meeting
-    except:
-        Meeting = None
-    
-    try:
-        Councillor = Base.classes.councillor
-    except:
-        Councillor = None
-
-# === MINIMAL ADMIN INTERFACE (NEW) ===
-
-@app.route('/cms/login', methods=['GET', 'POST'])
-def admin_login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        if username == 'admin' and password == 'admin':
-            user = AdminUser(1)
-            login_user(user)
-            return redirect(url_for('admin_dashboard'))
-        else:
-            flash('Invalid credentials!', 'error')
-    
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>CMS Login</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    </head>
-    <body class="bg-light">
-        <div class="container">
-            <div class="row justify-content-center mt-5">
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-header">
-                            <h4>CMS Login</h4>
-                        </div>
-                        <div class="card-body">
-                            {% with messages = get_flashed_messages() %}
-                                {% if messages %}
-                                    {% for message in messages %}
-                                        <div class="alert alert-danger">{{ message }}</div>
-                                    {% endfor %}
-                                {% endif %}
-                            {% endwith %}
-                            <form method="POST">
-                                <div class="mb-3">
-                                    <input type="text" class="form-control" name="username" placeholder="Username" value="admin">
-                                </div>
-                                <div class="mb-3">
-                                    <input type="password" class="form-control" name="password" placeholder="Password" value="admin">
-                                </div>
-                                <button type="submit" class="btn btn-primary w-100">Login</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    ''')
-
-@app.route('/cms/dashboard')
-@login_required
-def admin_dashboard():
-    try:
-        # Get basic counts
-        slide_count = db.session.query(Slide).count() if Slide else 0
-        event_count = db.session.query(Event).count() if Event else 0
-        meeting_count = db.session.query(Meeting).count() if Meeting else 0
-        councillor_count = db.session.query(Councillor).count() if Councillor else 0
-    except:
-        slide_count = event_count = meeting_count = councillor_count = 0
-    
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>CMS Dashboard</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    </head>
-    <body>
-        <nav class="navbar navbar-dark bg-dark">
-            <div class="container">
-                <span class="navbar-brand">CMS Dashboard</span>
-                <a href="/cms/logout" class="btn btn-outline-light btn-sm">Logout</a>
-            </div>
-        </nav>
-        
-        <div class="container mt-4">
-            <div class="row">
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <h3>{{ slide_count }}</h3>
-                            <p>Slides</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <h3>{{ event_count }}</h3>
-                            <p>Events</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <h3>{{ meeting_count }}</h3>
-                            <p>Meetings</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <h3>{{ councillor_count }}</h3>
-                            <p>Councillors</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    if Slide is None:  # Only initialize once
+        with app.app_context():
+            Base = automap_base()
+            Base.prepare(db.engine, reflect=True)
             
-            <div class="row mt-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Quick Actions</h5>
-                        </div>
-                        <div class="card-body">
-                            <a href="/cms/slides" class="btn btn-primary me-2">Manage Slides</a>
-                            <a href="/cms/events" class="btn btn-info me-2">Manage Events</a>
-                            <a href="/cms/meetings" class="btn btn-warning me-2">Manage Meetings</a>
-                            <a href="/cms/councillors" class="btn btn-success me-2">Manage Councillors</a>
-                            <a href="/" class="btn btn-secondary" target="_blank">View Website</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    ''', slide_count=slide_count, event_count=event_count, meeting_count=meeting_count, councillor_count=councillor_count)
+            Slide = Base.classes.homepage_slide
+            QuickLink = Base.classes.homepage_quicklink
+            Councillor = Base.classes.councillor
+            Meeting = Base.classes.meeting
+            Event = Base.classes.event
+            ContentPage = Base.classes.content_page
+            ContentCategory = Base.classes.content_category
+            ContentGallery = Base.classes.content_gallery
+            ContentDownload = Base.classes.content_download
+            ContentLink = Base.classes.content_link
+            MeetingType = Base.classes.meeting_type
+            EventCategory = Base.classes.event_category
+            Tag = Base.classes.tag
+            CouncillorTag = Base.classes.councillor_tag
 
-@app.route('/cms/logout')
-@login_required
-def admin_logout():
-    logout_user()
-    return redirect(url_for('admin_login'))
+def safe_string(value):
+    """Convert None/null values to empty string"""
+    return value if value is not None else ""
 
-@app.route('/cms/slides')
-@login_required
-def admin_slides():
-    try:
-        slides = db.session.query(Slide).all() if Slide else []
-    except:
-        slides = []
+def safe_getattr(obj, attr, default=""):
+    """Safely get attribute with default value"""
+    return getattr(obj, attr, default) if hasattr(obj, attr) else default
+
+def process_social_links(social_links_str):
+    """
+    Process social_links JSON string and return valid links only.
+    Returns empty list if no valid links found (to hide section).
+    """
+    if not social_links_str or social_links_str.strip() == '':
+        return []
     
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Manage Slides</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    </head>
-    <body>
-        <nav class="navbar navbar-dark bg-dark">
-            <div class="container">
-                <a href="/cms/dashboard" class="navbar-brand">← Dashboard</a>
-                <span class="navbar-text">Manage Slides</span>
-            </div>
-        </nav>
-        
-        <div class="container mt-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between">
-                    <h5>Homepage Slides</h5>
-                    <button class="btn btn-primary btn-sm">Add New Slide</button>
-                </div>
-                <div class="card-body">
-                    {% if slides %}
-                        <div class="table-responsive">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Title</th>
-                                        <th>Introduction</th>
-                                        <th>Active</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for slide in slides %}
-                                    <tr>
-                                        <td>{{ slide.title or '' }}</td>
-                                        <td>{{ (slide.introduction or '')[:50] }}...</td>
-                                        <td>
-                                            {% if slide.is_active %}
-                                                <span class="badge bg-success">Active</span>
-                                            {% else %}
-                                                <span class="badge bg-secondary">Inactive</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Edit</button>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p class="text-center">No slides found.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    ''', slides=slides)
-
-@app.route('/cms/events')
-@login_required
-def admin_events():
     try:
-        events = db.session.query(Event).all() if Event else []
-    except:
-        events = []
-    
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Manage Events</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    </head>
-    <body>
-        <nav class="navbar navbar-dark bg-dark">
-            <div class="container">
-                <a href="/cms/dashboard" class="navbar-brand">← Dashboard</a>
-                <span class="navbar-text">Manage Events</span>
-            </div>
-        </nav>
+        # Parse JSON string
+        links = json.loads(social_links_str)
         
-        <div class="container mt-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between">
-                    <h5>Events</h5>
-                    <button class="btn btn-primary btn-sm">Add New Event</button>
-                </div>
-                <div class="card-body">
-                    {% if events %}
-                        <div class="table-responsive">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Title</th>
-                                        <th>Date</th>
-                                        <th>Location</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for event in events %}
-                                    <tr>
-                                        <td>{{ event.title or '' }}</td>
-                                        <td>{{ event.date or '' }}</td>
-                                        <td>{{ event.location or '' }}</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Edit</button>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p class="text-center">No events found.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    ''', events=events)
-
-@app.route('/cms/meetings')
-@login_required
-def admin_meetings():
-    try:
-        meetings = db.session.query(Meeting).all() if Meeting else []
-    except:
-        meetings = []
-    
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Manage Meetings</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    </head>
-    <body>
-        <nav class="navbar navbar-dark bg-dark">
-            <div class="container">
-                <a href="/cms/dashboard" class="navbar-brand">← Dashboard</a>
-                <span class="navbar-text">Manage Meetings</span>
-            </div>
-        </nav>
+        if not isinstance(links, dict):
+            return []
         
-        <div class="container mt-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between">
-                    <h5>Meetings</h5>
-                    <button class="btn btn-primary btn-sm">Add New Meeting</button>
-                </div>
-                <div class="card-body">
-                    {% if meetings %}
-                        <div class="table-responsive">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Title</th>
-                                        <th>Date</th>
-                                        <th>Location</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for meeting in meetings %}
-                                    <tr>
-                                        <td>{{ meeting.title or '' }}</td>
-                                        <td>{{ meeting.meeting_date or '' }}</td>
-                                        <td>{{ meeting.location or '' }}</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Edit</button>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p class="text-center">No meetings found.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    ''', meetings=meetings)
-
-@app.route('/cms/councillors')
-@login_required
-def admin_councillors():
-    try:
-        councillors = db.session.query(Councillor).all() if Councillor else []
-    except:
-        councillors = []
-    
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Manage Councillors</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    </head>
-    <body>
-        <nav class="navbar navbar-dark bg-dark">
-            <div class="container">
-                <a href="/cms/dashboard" class="navbar-brand">← Dashboard</a>
-                <span class="navbar-text">Manage Councillors</span>
-            </div>
-        </nav>
+        valid_links = []
         
-        <div class="container mt-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between">
-                    <h5>Councillors</h5>
-                    <button class="btn btn-primary btn-sm">Add New Councillor</button>
-                </div>
-                <div class="card-body">
-                    {% if councillors %}
-                        <div class="table-responsive">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Title</th>
-                                        <th>Email</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for councillor in councillors %}
-                                    <tr>
-                                        <td>{{ councillor.name or '' }}</td>
-                                        <td>{{ councillor.title or '' }}</td>
-                                        <td>{{ councillor.email or '' }}</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Edit</button>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p class="text-center">No councillors found.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    ''', councillors=councillors)
+        # Define placeholder URLs that should be filtered out
+        placeholder_patterns = [
+            r'^https?://twitter\.com/?$',
+            r'^https?://x\.com/?$', 
+            r'^https?://linkedin\.com/?$',
+            r'^https?://www\.linkedin\.com/?$',
+            r'^https?://facebook\.com/?$',
+            r'^https?://www\.facebook\.com/?$',
+            r'^https?://instagram\.com/?$',
+            r'^https?://www\.instagram\.com/?$'
+        ]
+        
+        for platform, url in links.items():
+            if not url or not isinstance(url, str):
+                continue
+                
+            url = url.strip()
+            
+            # Skip empty URLs
+            if not url:
+                continue
+            
+            # Skip placeholder URLs
+            is_placeholder = any(re.match(pattern, url, re.IGNORECASE) for pattern in placeholder_patterns)
+            if is_placeholder:
+                continue
+            
+            # Add valid link
+            valid_links.append({
+                'platform': platform,
+                'url': url
+            })
+        
+        return valid_links
+        
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        # If JSON parsing fails, return empty list
+        return []
 
-# === ALL ORIGINAL ROUTES FROM YOUR WORKING FILE (UNCHANGED) ===
+# Test database connection
+try:
+    with app.app_context():
+        conn = sqlite3.connect(db_path)
+        print("✅ Database connected successfully")
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
+        print("📋 Tables in DB:", tables)
+        conn.close()
+except Exception as e:
+    print("❌ Failed to connect to DB:", e)
 
-@app.route('/api/homepage/slides', methods=['GET', 'OPTIONS'])
+# === HOMEPAGE API Routes ===
+@app.route('/api/homepage/slides')
 def get_homepage_slides():
-    if request.method == 'OPTIONS':
-        response = jsonify({})
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add('Access-Control-Allow-Headers', "*")
-        response.headers.add('Access-Control-Allow-Methods', "*")
-        return response
-    
     try:
-        if Slide:
-            slides = db.session.query(Slide).filter_by(is_active=True).order_by(Slide.sort_order).all()
-            slides_data = []
-            for slide in slides:
-                slides_data.append({
-                    "id": slide.id,
-                    "title": slide.title,
-                    "introduction": slide.introduction,
-                    "button_text": slide.button_text,
-                    "button_url": slide.button_url,
-                    "open_method": slide.open_method,
-                    "image": slide.image,
-                    "is_active": slide.is_active,
-                    "is_featured": slide.is_featured,
-                    "sort_order": slide.sort_order
-                })
-        else:
-            slides_data = []
-        
-        response = jsonify(slides_data)
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        return response
+        init_models()
+        # ONLY CHANGE: Add filtering for active slides and ordering
+        slides = db.session.query(Slide).filter(Slide.is_active == True).order_by(Slide.sort_order).all()
+        return jsonify([{
+            "id": s.id,
+            "title": safe_string(s.title),
+            "introduction": safe_string(s.introduction),
+            "image": f"/uploads/homepage/slides/{safe_string(s.image_filename)}" if s.image_filename else "",
+            "button_text": safe_string(s.button_name),
+            "button_url": safe_string(s.button_url),
+            "open_method": safe_string(s.open_method),
+            "is_featured": s.is_featured,
+            "sort_order": s.sort_order,
+            "is_active": s.is_active
+        } for s in slides])
     except Exception as e:
-        response = jsonify({"error": str(e)})
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        return response, 500
+        return jsonify({"error": f"Failed to load slides: {str(e)}"}), 500
 
-@app.route('/api/events', methods=['GET'])
+# Events Image JS - Final Version 5
+@app.route("/events-fix.js")
+def serve_events_fix_main():
+    return send_from_directory(basedir, "events-fix-final-v5.js")
+
+@app.route("/event-modal-fix.js")
+def serve_event_modal_fix():
+    return send_from_directory(basedir, "event-modal-fix.js")
+
+# Meeting Page Fixes JS (with enhanced breadcrumbs)
+@app.route("/meeting-page-dates.js")
+def serve_meeting_page_dates():
+    return send_from_directory(basedir, "meeting_page_dates_final.js")
+
+@app.route('/api/homepage/quick-links')
+def get_quick_links():
+    try:
+        init_models()
+        links = db.session.query(QuickLink).all()
+        return jsonify([{
+            "id": l.id,
+            "title": safe_string(l.title),                    # ✅ Title (working)
+            "description": safe_string(l.description),       # ✅ FIXED: Added description
+            "button_text": safe_string(l.button_name),       # ✅ FIXED: Added button text
+            "url": safe_string(l.button_url),                # ✅ Button URL
+            "icon": safe_string(safe_getattr(l, 'icon', '')), # ✅ Icon (if exists)
+            "sort_order": l.sort_order,
+            "is_active": l.is_active
+        } for l in links])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load quick links: {str(e)}"}), 500
+
+@app.route('/api/homepage/meetings')
+def get_meetings():
+    try:
+        init_models()
+        # Get current date for filtering
+        today = datetime.now().date()
+        
+        # Get all meeting types
+        meeting_types = db.session.query(MeetingType).filter(MeetingType.is_active == True).all()
+        
+        result = []
+        for mt in meeting_types:
+            # Get the next upcoming meeting for this type
+            next_meeting = db.session.query(Meeting).filter(
+                Meeting.meeting_type_id == mt.id,
+                Meeting.meeting_date >= today
+            ).order_by(Meeting.meeting_date.asc()).first()
+            
+            if next_meeting:
+                result.append({
+                    "id": next_meeting.id,
+                    "title": safe_string(next_meeting.title),
+                    "date": next_meeting.meeting_date,
+                    "time": safe_string(str(next_meeting.meeting_time)) if next_meeting.meeting_time else "",
+                    "location": safe_string(next_meeting.location),
+                    "document_url": safe_string(next_meeting.agenda_filename or next_meeting.minutes_filename or next_meeting.draft_minutes_filename),
+                    "type": safe_string(mt.name)
+                })
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": f"Failed to load meetings: {str(e)}"}), 500
+
+@app.route('/api/homepage/events')
 def get_events():
     try:
-        month = request.args.get('month', type=int)
+        init_models()
+        # Get current datetime for filtering
+        now = datetime.now()
+        
+        # Get all future events
+        future_events = db.session.query(Event).filter(Event.start_date >= now).all()
+        
+        # Sort events: featured first, then by date
+        sorted_events = sorted(future_events, key=lambda e: (not getattr(e, 'featured', False), e.start_date))
+        
+        # Limit to 6 events
+        limited_events = sorted_events[:6]
+        
+        return jsonify([{
+            "id": e.id,
+            "title": safe_string(e.title),
+            "description": safe_string(e.description),
+            "date": e.start_date,
+            "location": safe_string(e.location_name),
+            "image": f"/uploads/events/{safe_string(e.image_filename)}" if e.image_filename else "",
+            "featured": bool(getattr(e, 'featured', False))  # ✅ ADDED FEATURED FIELD
+        } for e in limited_events])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
+
+@app.route('/api/events')
+def get_all_events():
+    """Get events with filtering support for the events page"""
+    try:
+        init_models()
+        
+        # Get query parameters
         year = request.args.get('year', type=int)
+        month = request.args.get('month', type=int)
+        category_id = request.args.get('category', type=int)
         include_past = request.args.get('include_past', 'false').lower() == 'true'
         
-        if Event:
-            query = db.session.query(Event)
-            
-            if month and year:
-                from datetime import datetime
-                start_date = datetime(year, month, 1)
-                if month == 12:
-                    end_date = datetime(year + 1, 1, 1)
-                else:
-                    end_date = datetime(year, month + 1, 1)
-                
-                query = query.filter(Event.date >= start_date, Event.date < end_date)
-            
-            if not include_past:
-                from datetime import datetime
-                query = query.filter(Event.date >= datetime.now())
-            
-            events = query.order_by(Event.date).all()
-            
-            events_data = []
-            for event in events:
-                events_data.append({
-                    "id": event.id,
-                    "title": event.title,
-                    "description": event.description,
-                    "date": event.date.isoformat() if event.date else None,
-                    "end_date": event.end_date.isoformat() if event.end_date else None,
-                    "location": event.location,
-                    "image": event.image,
-                    "is_featured": event.is_featured,
-                    "website_url": event.website_url,
-                    "booking_url": event.booking_url,
-                    "price": event.price,
-                    "capacity": event.capacity,
-                    "status": event.status
-                })
-        else:
-            events_data = []
+        # Base query
+        query = db.session.query(Event).filter(Event.is_published == True)
         
-        return jsonify({"events": events_data})
+        # Date filtering
+        if year and month:
+            # Get events for specific month/year
+            start_date = datetime(year, month, 1)
+            if month == 12:
+                end_date = datetime(year + 1, 1, 1)
+            else:
+                end_date = datetime(year, month + 1, 1)
+            query = query.filter(Event.start_date >= start_date, Event.start_date < end_date)
+        elif not include_past:
+            # Only future events if not specifically including past
+            now = datetime.now()
+            query = query.filter(Event.start_date >= now)
+        
+        # Category filtering
+        if category_id:
+            query = query.filter(Event.category_id == category_id)
+        
+        # Get events with category information
+        events = query.order_by(Event.start_date).all()
+        
+        # Build response with category information
+        result = []
+        for event in events:
+            # Get category information
+            category = None
+            if event.category_id:
+                category = db.session.query(EventCategory).filter(EventCategory.id == event.category_id).first()
+            
+            # Determine if event is in the past
+            now = datetime.now()
+            is_past = event.start_date < now
+            
+            event_data = {
+                "id": event.id,
+                "title": safe_string(event.title),
+                "description": safe_string(event.description),
+                "short_description": safe_string(event.short_description),
+                "start_date": event.start_date.isoformat() if event.start_date else None,
+                "end_date": event.end_date.isoformat() if event.end_date else None,
+                "all_day": event.all_day,
+                "location_name": safe_string(event.location_name),
+                "location_address": safe_string(event.location_address),
+                "location_url": safe_string(event.location_url),
+                "contact_name": safe_string(event.contact_name),
+                "contact_email": safe_string(event.contact_email),
+                "contact_phone": safe_string(event.contact_phone),
+                "booking_required": event.booking_required,
+                "booking_url": safe_string(event.booking_url),
+                "max_attendees": event.max_attendees,
+                "is_free": event.is_free,
+                "price": safe_string(event.price),
+                "image": f"/uploads/events/{safe_string(event.image_filename)}" if event.image_filename else "",
+                "featured": event.featured,
+                "status": safe_string(event.status),
+                "is_past": is_past,
+                "category": {
+                    "id": category.id,
+                    "name": safe_string(category.name),
+                    "color": safe_string(category.color),
+                    "icon": safe_string(category.icon)
+                } if category else None,
+                # Legacy format for compatibility
+                "date": event.start_date.strftime('%a, %d %b %Y %H:%M:%S GMT') if event.start_date else "",
+                "location": safe_string(event.location_name)
+            }
+            
+            result.append(event_data)
+        
+        # Add metadata
+        response = {
+            "events": result,
+            "total": len(result),
+            "filters": {
+                "year": year,
+                "month": month,
+                "category_id": category_id,
+                "include_past": include_past
+            }
+        }
+        
+        return jsonify(response)
+        
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Failed to load events: {str(e)}"}), 500
 
-@app.route('/health')
-def health_check():
+# === COUNCILLOR API Routes ===
+@app.route('/api/councillors')
+def get_councillors():
     try:
-        slide_count = db.session.query(Slide).count() if Slide else 0
-        event_count = db.session.query(Event).count() if Event else 0
-        meeting_count = db.session.query(Meeting).count() if Meeting else 0
-        councillor_count = db.session.query(Councillor).count() if Councillor else 0
+        init_models()
+        councillors = db.session.query(Councillor).filter(Councillor.is_published == True).all()
+        
+        result = []
+        for c in councillors:
+            # Get councillor tags for this councillor
+            councillor_tags = db.session.query(Tag).join(
+                CouncillorTag, Tag.id == CouncillorTag.tag_id
+            ).filter(CouncillorTag.councillor_id == c.id).all()
+            
+            # Build image URL
+            image_url = ""
+            if c.image_filename:
+                image_url = f"/uploads/councillors/{c.image_filename}"
+            
+            # Process social links - FIXED
+            processed_social_links = process_social_links(safe_getattr(c, 'social_links', ''))
+            
+            result.append({
+                "id": c.id,
+                "name": safe_string(c.name),
+                "title": safe_string(c.title),
+                "role": safe_string(c.title),
+                "phone": safe_string(c.phone),
+                "email": safe_string(c.email),
+                "intro": safe_string(safe_getattr(c, 'intro', '')),
+                "bio": safe_string(safe_getattr(c, 'bio', '')),
+                "image_url": image_url,
+                "social_links": processed_social_links,
+                "tags": [{
+                    "id": tag.id,
+                    "name": safe_string(tag.name),
+                    "color": safe_string(tag.color),
+                    "description": safe_string(tag.description)
+                } for tag in councillor_tags]
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": f"Failed to load councillors: {str(e)}"}), 500
+
+@app.route('/api/councillors/<int:councillor_id>')
+def get_councillor_detail(councillor_id):
+    try:
+        init_models()
+        councillor = db.session.query(Councillor).filter(Councillor.id == councillor_id).first()
+        
+        if not councillor:
+            return jsonify({"error": "Councillor not found"}), 404
+        
+        # Get councillor tags
+        councillor_tags = db.session.query(Tag).join(CouncillorTag, Tag.id == CouncillorTag.tag_id).filter(CouncillorTag.councillor_id == councillor_id).all()
+        
+        # Build image URL
+        image_url = ""
+        if councillor.image_filename:
+            image_url = f"/uploads/councillors/{councillor.image_filename}"
+        
+        # Process social links - FIXED
+        processed_social_links = process_social_links(safe_getattr(councillor, 'social_links', ''))
         
         return jsonify({
-            "status": "healthy",
-            "database": "connected",
-            "database_path": db_path,
-            "slides": slide_count,
-            "events": event_count,
-            "meetings": meeting_count,
-            "councillors": councillor_count,
-            "admin_interface": "available at /cms/login"
-        }), 200
+            "id": councillor.id,
+            "name": safe_string(councillor.name),
+            "title": safe_string(councillor.title),
+            "role": safe_string(councillor.title),
+            "phone": safe_string(councillor.phone),
+            "email": safe_string(councillor.email),
+            "bio": safe_string(safe_getattr(councillor, 'bio', '')),
+            "intro": safe_string(safe_getattr(councillor, 'intro', '')),
+            "address": safe_string(safe_getattr(councillor, 'address', '')),
+            "qualifications": safe_string(safe_getattr(councillor, 'qualifications', '')),
+            "image": image_url,
+            "image_url": image_url,
+            "social_links": processed_social_links,
+            "tags": [{
+                "id": tag.id,
+                "name": safe_string(tag.name),
+                "color": safe_string(tag.color),
+                "description": safe_string(tag.description)
+            } for tag in councillor_tags]
+        })
     except Exception as e:
-        return jsonify({"status": "unhealthy", "error": str(e)}), 500
+        return jsonify({"error": f"Failed to load councillor details: {str(e)}"}), 500
 
+@app.route('/api/councillor-tags')
+def get_councillor_tags():
+    try:
+        init_models()
+        tags = db.session.query(Tag).all()
+        return jsonify([{
+            "id": t.id,
+            "name": safe_string(t.name),
+            "color": safe_string(t.color),
+            "description": safe_string(t.description),
+            "is_active": t.is_active
+        } for t in tags])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load councillor tags: {str(e)}"}), 500
+
+# === CONTENT API Routes ===
+@app.route('/api/content/pages')
+def get_content_pages():
+    try:
+        init_models()
+        pages = db.session.query(ContentPage).all()
+        
+        result = []
+        for p in pages:
+            # Get category and subcategory objects
+            category = None
+            subcategory = None
+            
+            if p.category_id:
+                cat = db.session.query(ContentCategory).filter(ContentCategory.id == p.category_id).first()
+                if cat:
+                    category = {
+                        "id": cat.id,
+                        "name": safe_string(cat.name),
+                        "description": safe_string(cat.description),
+                        "color": safe_string(cat.color)
+                    }
+            
+            if p.subcategory_id:
+                subcat = db.session.query(ContentCategory).filter(ContentCategory.id == p.subcategory_id).first()
+                if subcat:
+                    subcategory = {
+                        "id": subcat.id,
+                        "name": safe_string(subcat.name),
+                        "description": safe_string(subcat.description),
+                        "color": safe_string(subcat.color)
+                    }
+            
+            # Use the most recent date as updated_at
+            updated_at = p.last_reviewed or p.approval_date or p.creation_date
+            
+            result.append({
+                "id": p.id,
+                "title": safe_string(p.title),
+                "slug": safe_string(p.slug),
+                "short_description": safe_string(p.short_description),
+                "long_description": safe_string(p.long_description),
+                "category_id": p.category_id,
+                "subcategory_id": p.subcategory_id,
+                "category": category,  # Added category object
+                "subcategory": subcategory,  # Added subcategory object
+                "status": safe_string(p.status),
+                "is_featured": p.is_featured,
+                "creation_date": p.creation_date,
+                "approval_date": p.approval_date,
+                "last_reviewed": p.last_reviewed,
+                "next_review_date": p.next_review_date,
+                "updated_at": updated_at  # Added updated_at field
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": f"Failed to load content pages: {str(e)}"}), 500
+
+@app.route('/api/content/categories')
+def get_content_categories():
+    try:
+        init_models()
+        categories = db.session.query(ContentCategory).all()
+        
+        result = []
+        for c in categories:
+            # Count pages in this category
+            page_count = db.session.query(ContentPage).filter(ContentPage.category_id == c.id).count()
+            
+            # Get subcategories (if any)
+            subcategories = db.session.query(ContentCategory).filter(ContentCategory.parent_id == c.id).all() if hasattr(ContentCategory, 'parent_id') else []
+            
+            subcategories_data = []
+            for sub in subcategories:
+                sub_page_count = db.session.query(ContentPage).filter(ContentPage.subcategory_id == sub.id).count()
+                subcategories_data.append({
+                    "id": sub.id,
+                    "name": safe_string(sub.name),
+                    "description": safe_string(sub.description),
+                    "color": safe_string(sub.color),
+                    "page_count": sub_page_count
+                })
+            
+            result.append({
+                "id": c.id,
+                "name": safe_string(c.name),
+                "description": safe_string(c.description),
+                "color": safe_string(c.color),
+                "is_active": c.is_active,
+                "is_predefined": c.is_predefined,
+                "url_path": safe_string(c.url_path),
+                "page_count": page_count,  # Added page count
+                "subcategories": subcategories_data  # Added subcategories
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": f"Failed to load content categories: {str(e)}"}), 500
+
+@app.route('/api/content/page/<slug>')
+def get_content_page_by_slug(slug):
+    try:
+        init_models()
+        
+        # Find the page by slug
+        page = db.session.query(ContentPage).filter(ContentPage.slug == slug).first()
+        
+        if not page:
+            return jsonify({"error": f"Page '{slug}' not found"}), 404
+        
+        # Get category and subcategory objects
+        category = None
+        subcategory = None
+        
+        if page.category_id:
+            cat = db.session.query(ContentCategory).filter(ContentCategory.id == page.category_id).first()
+            if cat:
+                category = {
+                    "id": cat.id,
+                    "name": safe_string(cat.name),
+                    "description": safe_string(cat.description),
+                    "color": safe_string(cat.color),
+                    "url_path": safe_string(cat.url_path)
+                }
+        
+        if page.subcategory_id:
+            subcat = db.session.query(ContentCategory).filter(ContentCategory.id == page.subcategory_id).first()
+            if subcat:
+                subcategory = {
+                    "id": subcat.id,
+                    "name": safe_string(subcat.name),
+                    "description": safe_string(subcat.description),
+                    "color": safe_string(subcat.color),
+                    "url_path": safe_string(subcat.url_path)
+                }
+        
+        # Use the most recent date as updated_at
+        updated_at = page.last_reviewed or page.approval_date or page.creation_date
+        
+        # Get gallery images for this page
+        gallery_images = []
+        gallery_items = db.session.query(ContentGallery).filter(ContentGallery.content_page_id == page.id).order_by(ContentGallery.sort_order).all()
+        for gallery_item in gallery_items:
+            gallery_images.append({
+                "id": gallery_item.id,
+                "image_url": f"/uploads/content/images/{gallery_item.filename}",
+                "title": safe_string(gallery_item.title),
+                "description": safe_string(gallery_item.description),
+                "alt_text": safe_string(gallery_item.alt_text),
+                "sort_order": gallery_item.sort_order
+            })
+        
+        # Get downloads for this page
+        downloads = []
+        download_items = db.session.query(ContentDownload).filter(ContentDownload.content_page_id == page.id).order_by(ContentDownload.sort_order).all()
+        for download_item in download_items:
+            downloads.append({
+                "id": download_item.id,
+                "download_url": f"/uploads/content/downloads/{download_item.filename}",
+                "filename": safe_string(download_item.filename),
+                "title": safe_string(download_item.title),
+                "description": safe_string(download_item.description),
+                "alt_text": safe_string(download_item.alt_text),
+                "sort_order": download_item.sort_order
+            })
+        
+        # Get related links for this page
+        related_links = []
+        link_items = db.session.query(ContentLink).filter(ContentLink.content_page_id == page.id).order_by(ContentLink.sort_order).all()
+        for link_item in link_items:
+            related_links.append({
+                "id": link_item.id,
+                "title": safe_string(link_item.title),
+                "url": safe_string(link_item.url),
+                "new_tab": bool(link_item.new_tab),
+                "sort_order": link_item.sort_order
+            })
+        
+        # Build the response with all fields the frontend expects
+        result = {
+            "id": page.id,
+            "title": safe_string(page.title),
+            "slug": safe_string(page.slug),
+            "short_description": safe_string(page.short_description),
+            "long_description": safe_string(page.long_description),
+            "category_id": page.category_id,
+            "subcategory_id": page.subcategory_id,
+            "category": category,
+            "subcategory": subcategory,
+            "status": safe_string(page.status),
+            "is_featured": page.is_featured,
+            "creation_date": page.creation_date,
+            "approval_date": page.approval_date,
+            "last_reviewed": page.last_reviewed,
+            "next_review_date": page.next_review_date,
+            "updated_at": updated_at,
+            
+            # Populated fields with actual data
+            "gallery_images": gallery_images,
+            "downloads": downloads,
+            "related_links": related_links
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"error": f"Failed to load content page: {str(e)}"}), 500
+
+# === MEETING API Routes ===
+@app.route('/api/meeting-types')
+def get_meeting_types():
+    try:
+        init_models()
+        
+        # Get all active meeting types
+        meeting_types = db.session.query(MeetingType).filter(MeetingType.is_active == True).all()
+        
+        # Filter to only show specific meeting types that should appear on the page
+        allowed_meeting_types = [
+            'Community and Recreation',
+            'Finance and Governance', 
+            'Full Council Meetings',
+            'Planning and Development',
+            'Annual Town Meeting'  # This will be moved to last position
+        ]
+        
+        # Filter meeting types
+        filtered_types = [mt for mt in meeting_types if mt.name in allowed_meeting_types]
+        
+        # Custom ordering: Annual Town Meeting should be last
+        def get_sort_order(meeting_type_name):
+            order_map = {
+                'Community and Recreation': 1,
+                'Finance and Governance': 2,
+                'Full Council Meetings': 3,
+                'Planning and Development': 4,
+                'Annual Town Meeting': 5  # Last position
+            }
+            return order_map.get(meeting_type_name, 999)
+        
+        # Sort meeting types by custom order
+        filtered_types.sort(key=lambda mt: get_sort_order(mt.name))
+        
+        result = []
+        today = date.today()
+        
+        for mt in filtered_types:
+            # Get the next upcoming meeting for this type
+            next_meeting = db.session.query(Meeting).filter(
+                Meeting.meeting_type_id == mt.id,
+                Meeting.meeting_date >= today,
+                Meeting.is_published == True
+            ).order_by(Meeting.meeting_date.asc()).first()
+            
+            # Count total meetings for this type
+            meeting_count = db.session.query(Meeting).filter(
+                Meeting.meeting_type_id == mt.id,
+                Meeting.is_published == True
+            ).count()
+            
+            # Build next meeting data if exists
+            next_meeting_data = None
+            if next_meeting:
+                next_meeting_data = {
+                    "id": next_meeting.id,
+                    "title": safe_string(next_meeting.title),
+                    "date": next_meeting.meeting_date.strftime('%d/%m/%Y') if next_meeting.meeting_date else None,
+                    "time": str(next_meeting.meeting_time)[:5] if next_meeting.meeting_time else "",  # HH:MM format
+                    "location": safe_string(next_meeting.location),
+                    "agenda_filename": safe_string(next_meeting.agenda_filename),
+                    "schedule_applications_filename": safe_string(next_meeting.schedule_applications_filename),
+                    "status": safe_string(next_meeting.status)
+                }
+            
+            result.append({
+                "id": mt.id,
+                "name": safe_string(mt.name),
+                "description": safe_string(mt.description),
+                "color": safe_string(mt.color),
+                "is_active": mt.is_active,
+                "show_schedule_applications": mt.show_schedule_applications,
+                "meeting_count": meeting_count,
+                "next_meeting": next_meeting_data  # ADDED: Next meeting data
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": f"Failed to load meeting types: {str(e)}"}), 500
+
+@app.route('/api/meetings/type/<type_name>')
+def get_meetings_by_type(type_name):
+    try:
+        init_models()
+        # URL decode the type name
+        decoded_type_name = unquote(type_name)
+        
+        # Get pagination parameters from request
+        from flask import request
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        
+        # Join meetings with meeting_type to filter by type name
+        meetings = db.session.query(Meeting).join(MeetingType, Meeting.meeting_type_id == MeetingType.id).filter(MeetingType.name == decoded_type_name).order_by(Meeting.meeting_date.desc()).all()
+        
+        # Get current date for categorization
+        today = date.today()
+        
+        # Categorize meetings
+        upcoming_meetings = []
+        recent_meetings = []
+        historic_meetings = []
+        all_meetings = []  # Flat array for backward compatibility
+        
+        def format_date_with_comma(meeting_date):
+            """Format date as 'Monday, 30 June 2025'"""
+            if not meeting_date:
+                return None
+            return meeting_date.strftime('%A, %d %B %Y')
+        
+        def create_meeting_data(m):
+            """Create meeting data object with file availability flags and legacy structure"""
+            
+            # Create legacy nested file structure for frontend compatibility
+            agenda = None
+            if m.agenda_filename and m.agenda_filename.strip():
+                agenda = {
+                    "file_url": f"/uploads/meetings/{m.agenda_filename}",
+                    "title": safe_string(m.agenda_title) or "Meeting Agenda",
+                    "description": safe_string(m.agenda_description) or ""
+                }
+            
+            minutes = None
+            if m.minutes_filename and m.minutes_filename.strip():
+                minutes = {
+                    "file_url": f"/uploads/meetings/{m.minutes_filename}",
+                    "title": safe_string(m.minutes_title) or "Approved Minutes",
+                    "description": safe_string(m.minutes_description) or ""
+                }
+            
+            draft_minutes = None
+            if m.draft_minutes_filename and m.draft_minutes_filename.strip():
+                draft_minutes = {
+                    "file_url": f"/uploads/meetings/{m.draft_minutes_filename}",
+                    "title": safe_string(m.draft_minutes_title) or "Draft Minutes",
+                    "description": safe_string(m.draft_minutes_description) or ""
+                }
+            
+            schedule_applications = None
+            if m.schedule_applications_filename and m.schedule_applications_filename.strip():
+                schedule_applications = {
+                    "file_url": f"/uploads/meetings/{m.schedule_applications_filename}",
+                    "title": safe_string(m.schedule_applications_title) or "Schedule of Applications",
+                    "description": safe_string(m.schedule_applications_description) or ""
+                }
+            
+            audio = None
+            if m.audio_filename and m.audio_filename.strip():
+                audio = {
+                    "file_url": f"/uploads/meetings/{m.audio_filename}",
+                    "title": safe_string(m.audio_title) or "Meeting Audio",
+                    "description": safe_string(m.audio_description) or ""
+                }
+            
+            
+            summary = None
+            if m.summary_url and m.summary_url.strip():
+                summary = {
+                    "file_url": safe_string(m.summary_url),
+                    "title": "Meeting Summary",
+                    "description": "",
+                    "button_text": "View Summary"
+                }
+            else:
+                # Provide summary object even when no URL, with custom button text
+                summary = {
+                    "file_url": None,
+                    "title": "Meeting Summary",
+                    "description": "",
+                    "button_text": "Summary Page Unavailable"
+                }
+            
+            return {
+                "id": m.id,
+                "title": safe_string(m.title),
+                "date": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,  # Revert to DD/MM/YYYY
+                "date_formatted": format_date_with_comma(m.meeting_date),  # Keep formatted version
+                "date_raw": m.meeting_date.strftime('%d/%m/%Y') if m.meeting_date else None,  # Raw date for processing
+                "time": str(m.meeting_time)[:5] if m.meeting_time else "",
+                "location": safe_string(m.location),
+                "status": safe_string(m.status),
+                "is_published": m.is_published,
+                "notes": safe_string(m.notes),
+                
+                # Summary button text (special handling)
+                "summary_button_text": "Summary Page Unavailable" if not (m.summary_url and m.summary_url.strip()) else "View Summary",
+                
+                # LEGACY NESTED STRUCTURE (for frontend compatibility)
+                "agenda": agenda,
+                "minutes": minutes,
+                "draft_minutes": draft_minutes,
+                "schedule_applications": schedule_applications,
+                "audio": audio,
+                "summary": summary,
+                
+                # Enhanced file fields with URLs
+                "agenda_filename": safe_string(m.agenda_filename),
+                "agenda_title": safe_string(m.agenda_title),
+                "agenda_description": safe_string(m.agenda_description),
+                "agenda_url": f"/uploads/meetings/{m.agenda_filename}" if m.agenda_filename else None,
+                
+                "minutes_filename": safe_string(m.minutes_filename),
+                "minutes_title": safe_string(m.minutes_title),
+                "minutes_description": safe_string(m.minutes_description),
+                "minutes_url": f"/uploads/meetings/{m.minutes_filename}" if m.minutes_filename else None,
+                
+                "draft_minutes_filename": safe_string(m.draft_minutes_filename),
+                "draft_minutes_title": safe_string(m.draft_minutes_title),
+                "draft_minutes_description": safe_string(m.draft_minutes_description),
+                "draft_minutes_url": f"/uploads/meetings/{m.draft_minutes_filename}" if m.draft_minutes_filename else None,
+                
+                "schedule_applications_filename": safe_string(m.schedule_applications_filename),
+                "schedule_applications_title": safe_string(m.schedule_applications_title),
+                "schedule_applications_description": safe_string(m.schedule_applications_description),
+                "schedule_applications_url": f"/uploads/meetings/{m.schedule_applications_filename}" if m.schedule_applications_filename else None,
+                
+                "audio_filename": safe_string(m.audio_filename),
+                "audio_title": safe_string(m.audio_title),
+                "audio_description": safe_string(m.audio_description),
+                "audio_url": f"/uploads/meetings/{m.audio_filename}" if m.audio_filename else None,
+                
+                "summary_url": safe_string(m.summary_url),
+                
+                # Boolean flags for file availability (NEW)
+                "has_agenda": bool(m.agenda_filename and m.agenda_filename.strip()),
+                "has_minutes": bool(m.minutes_filename and m.minutes_filename.strip()),
+                "has_draft_minutes": bool(m.draft_minutes_filename and m.draft_minutes_filename.strip()),
+                "has_schedule_applications": bool(m.schedule_applications_filename and m.schedule_applications_filename.strip()),
+                "has_audio": bool(m.audio_filename and m.audio_filename.strip()),
+                "has_summary": bool(m.summary_url and m.summary_url.strip())
+            }
+        
+        for m in meetings:
+            meeting_data = create_meeting_data(m)
+            
+            # Add to flat array for backward compatibility
+            all_meetings.append(meeting_data)
+            
+            # Categorize based on meeting date
+            if m.meeting_date:
+                if m.meeting_date >= today:
+                    upcoming_meetings.append(meeting_data)
+                else:
+                    historic_meetings.append(meeting_data)
+        
+        # Recent meetings are the last 6 past meetings
+        recent_meetings = historic_meetings[:6] if historic_meetings else []
+        
+        # Sort upcoming meetings by date (earliest first)
+        upcoming_meetings.sort(key=lambda x: x['date'] if x['date'] else '')
+        
+        # Pagination for historic meetings
+        total_historic = len(historic_meetings)
+        start_index = (page - 1) * per_page
+        end_index = start_index + per_page
+        paginated_historic = historic_meetings[start_index:end_index]
+        
+        has_more_historic = end_index < total_historic
+        show_load_more = total_historic >= 10  # Show Load More if 10+ meetings
+        
+        # Return enhanced backward compatible format
+        return jsonify({
+            # OLD FORMAT (for current frontend compatibility)
+            "meetings": all_meetings,
+            
+            # NEW FORMAT (enhanced with pagination and flags)
+            "upcoming": upcoming_meetings,
+            "recent": recent_meetings,
+            "historic": paginated_historic,  # Paginated historic meetings
+            
+            # PAGINATION INFO
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total_historic": total_historic,
+                "has_more": has_more_historic,
+                "showing": len(paginated_historic),
+                "total_pages": (total_historic + per_page - 1) // per_page,
+                "show_load_more_button": show_load_more,  # Frontend guidance
+                "load_more_enabled": has_more_historic,   # Whether button should be enabled
+                "load_more_text": "Load More Meetings" if has_more_historic else "All Meetings Loaded"
+            },
+            
+            # UI GUIDANCE (for frontend implementation)
+            "ui_hints": {
+                "date_format": "formatted_with_comma",  # Tells frontend to use formatted dates
+                "summary_button_text_field": "summary_button_text",  # Custom summary text
+                "load_more_position": "left_of_back_button",  # UI positioning hint
+                "load_more_threshold": 10  # Show button when >= 10 meetings
+            },
+            
+            # METADATA
+            "total_count": len(meetings),
+            "format_version": "v3_enhanced",
+            "features": ["file_flags", "pagination", "formatted_dates"]
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Failed to load meetings for type '{type_name}': {str(e)}"}), 500
+
+
+
+@app.route('/api/meetings/<int:meeting_id>')
+def get_meeting_detail(meeting_id):
+    try:
+        init_models()
+        meeting = db.session.query(Meeting).filter(Meeting.id == meeting_id).first()
+        
+        if not meeting:
+            return jsonify({"error": "Meeting not found"}), 404
+        
+        # Get meeting type info
+        meeting_type = db.session.query(MeetingType).filter(MeetingType.id == meeting.meeting_type_id).first()
+        
+        # Build file URLs
+        agenda_url = None
+        if meeting.agenda_filename:
+            agenda_url = f"/uploads/meetings/{meeting.agenda_filename}"
+        
+        schedule_applications_url = None
+        if meeting.schedule_applications_filename:
+            schedule_applications_url = f"/uploads/meetings/{meeting.schedule_applications_filename}"
+        
+        minutes_url = None
+        if meeting.minutes_filename:
+            minutes_url = f"/uploads/meetings/{meeting.minutes_filename}"
+        
+        draft_minutes_url = None
+        if meeting.draft_minutes_filename:
+            draft_minutes_url = f"/uploads/meetings/{meeting.draft_minutes_filename}"
+        
+        audio_url = None
+        if meeting.audio_filename:
+            audio_url = f"/uploads/meetings/{meeting.audio_filename}"
+        
+        return jsonify({
+            "id": meeting.id,
+            "title": safe_string(meeting.title),
+            "meeting_type": {
+                "id": meeting_type.id if meeting_type else None,
+                "name": safe_string(meeting_type.name) if meeting_type else "",
+                "color": safe_string(meeting_type.color) if meeting_type else "",
+                "show_schedule_applications": meeting_type.show_schedule_applications if meeting_type else False
+            },
+            "date": meeting.meeting_date.strftime('%d/%m/%Y') if meeting.meeting_date else None,
+            "time": str(meeting.meeting_time)[:5] if meeting.meeting_time else "",
+            "location": safe_string(meeting.location),
+            "status": safe_string(meeting.status),
+            "is_published": meeting.is_published,
+            "notes": safe_string(meeting.notes),
+            "agenda": {
+                "filename": safe_string(meeting.agenda_filename),
+                "file_url": agenda_url,
+                "title": safe_string(safe_getattr(meeting, 'agenda_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'agenda_description', ''))
+            } if meeting.agenda_filename else None,
+            "schedule_applications": {
+                "filename": safe_string(meeting.schedule_applications_filename),
+                "file_url": schedule_applications_url,
+                "title": safe_string(safe_getattr(meeting, 'schedule_applications_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'schedule_applications_description', ''))
+            } if meeting.schedule_applications_filename else None,
+            "minutes": {
+                "filename": safe_string(meeting.minutes_filename),
+                "file_url": minutes_url,
+                "title": safe_string(safe_getattr(meeting, 'minutes_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'minutes_description', ''))
+            } if meeting.minutes_filename else None,
+            "draft_minutes": {
+                "filename": safe_string(meeting.draft_minutes_filename),
+                "file_url": draft_minutes_url,
+                "title": safe_string(safe_getattr(meeting, 'draft_minutes_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'draft_minutes_description', ''))
+            } if meeting.draft_minutes_filename else None,
+            "audio": {
+                "filename": safe_string(meeting.audio_filename),
+                "file_url": audio_url,
+                "title": safe_string(safe_getattr(meeting, 'audio_title', '')),
+                "description": safe_string(safe_getattr(meeting, 'audio_description', ''))
+            } if meeting.audio_filename else None,
+            "summary_url": safe_string(safe_getattr(meeting, 'summary_url', ''))
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to load meeting details: {str(e)}"}), 500
+
+# === EVENT API Routes ===
+@app.route('/api/event-categories')
+def get_event_categories():
+    try:
+        init_models()
+        categories = db.session.query(EventCategory).all()
+        return jsonify([{
+            "id": c.id,
+            "name": safe_string(c.name),
+            "description": safe_string(c.description),
+            "color": safe_string(c.color),
+            "icon": safe_string(c.icon),
+            "is_active": c.is_active
+        } for c in categories])
+    except Exception as e:
+        return jsonify({"error": f"Failed to load event categories: {str(e)}"}), 500
+
+@app.route('/api/events/<int:event_id>')
+def get_event_detail(event_id):
+    try:
+        init_models()
+        event = db.session.query(Event).filter(Event.id == event_id).first()
+        
+        if not event:
+            return jsonify({"error": "Event not found"}), 404
+        
+        return jsonify({
+            "id": event.id,
+            "title": safe_string(event.title),
+            "description": safe_string(event.description),
+            "long_description": safe_string(safe_getattr(event, 'long_description', '')),
+            "start_date": event.start_date,
+            "end_date": safe_getattr(event, 'end_date', None),
+            "start_time": safe_string(str(event.start_time)) if safe_getattr(event, 'start_time', None) else "",
+            "end_time": safe_string(str(safe_getattr(event, 'end_time', ''))) if safe_getattr(event, 'end_time', None) else "",
+            "location_name": safe_string(event.location_name),
+            "location_address": safe_string(safe_getattr(event, 'location_address', '')),
+            "contact_email": safe_string(safe_getattr(event, 'contact_email', '')),
+            "contact_phone": safe_string(safe_getattr(event, 'contact_phone', '')),
+            "website_url": safe_string(safe_getattr(event, 'website_url', '')),
+            "booking_url": safe_string(safe_getattr(event, 'booking_url', '')),
+            "price": safe_string(safe_getattr(event, 'price', '')),
+            "capacity": safe_getattr(event, 'capacity', None),
+            "is_featured": safe_getattr(event, 'is_featured', False),
+            "status": safe_string(safe_getattr(event, 'status', '')),
+            "image": safe_string(safe_getattr(event, 'image', ''))
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to load event details: {str(e)}"}), 500
+
+# === Static and Admin Routing ===
 @app.route("/admin")
 def admin_root():
-    return redirect("/cms/login")
+    return redirect("/admin/login")
 
 @app.route("/admin/<path:path>")
 def serve_admin(path):
-    return redirect("/cms/login")
+    return send_from_directory("dist", "index.html")
 
 @app.route("/login")
 def login():
-    return redirect("/cms/login")
+    return send_from_directory("dist", "index.html")
 
 @app.route("/assets/<path:filename>")
 def serve_assets(filename):
     return send_from_directory(os.path.join(app.static_folder), filename)
 
+# Route to serve uploaded images
 @app.route("/uploads/<path:filename>")
 def serve_uploads(filename):
+    """Serve uploaded files from the uploads directory"""
     uploads_dir = os.path.join(basedir, "uploads")
     return send_from_directory(uploads_dir, filename)
 
+# Route to serve slider fix script
 @app.route("/slider-fix.js")
 def serve_slider_fix():
     return send_from_directory(basedir, "slider-fix.js")
-
-@app.route("/events-fix.js")
-def serve_events_fix():
-    return send_from_directory(basedir, "events-fix.js")
 
 @app.route("/")
 def serve_frontend():
@@ -644,7 +1144,7 @@ def serve_frontend():
 
 @app.route("/<path:path>")
 def serve_frontend_paths(path):
-    if path.startswith("api/") or path.startswith("cms/") or path.startswith("admin/") or path.startswith("assets/") or path.startswith("uploads/"):
+    if path.startswith("api/") or path.startswith("admin/") or path.startswith("assets/") or path.startswith("uploads/"):
         return "Not Found", 404
     return send_from_directory("dist", "index.html")
 

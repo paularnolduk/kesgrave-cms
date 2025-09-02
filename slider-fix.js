@@ -1,13 +1,31 @@
 /**
- * Slider Fix Script
+ * Slider Fix Script - Frontend Version
  * This script patches the slider to properly display images, introduction text, and buttons
- * from the API data.
+ * from the API data. ONLY runs on homepage to prevent admin interface conflicts.
  */
 
 (function() {
     'use strict';
     
-    console.log('🔧 Slider fix script loaded');
+    console.log('🔧 Slider fix script loaded (frontend version)');
+    
+    // CRITICAL: Only run on homepage - prevent interference with admin pages
+    if (window.location.pathname !== '/' && 
+        !window.location.pathname.includes('/index') && 
+        window.location.pathname !== '') {
+        console.log('ℹ️ Not on homepage, skipping slider fix');
+        return;
+    }
+    
+    // Additional check: Don't run on admin pages
+    if (window.location.pathname.includes('/admin') || 
+        window.location.pathname.includes('/cms') ||
+        window.location.pathname.includes('/login')) {
+        console.log('ℹ️ On admin page, skipping slider fix');
+        return;
+    }
+    
+    console.log('✅ On homepage, initializing slider fix');
     
     // Wait for DOM to be ready
     function waitForDOM() {
@@ -20,16 +38,27 @@
         });
     }
     
-    // Wait for slides to be rendered
+    // Wait for slides to be rendered with timeout to prevent infinite loops
     function waitForSlides() {
         return new Promise((resolve) => {
+            let attempts = 0;
+            const maxAttempts = 50; // Maximum 5 seconds (50 * 100ms)
+            
             const checkSlides = () => {
+                attempts++;
+                
+                if (attempts > maxAttempts) {
+                    console.warn('⚠️ Slider fix timeout - slides not found after 5 seconds');
+                    resolve([]);
+                    return;
+                }
+                
                 const slides = document.querySelectorAll('.slide');
                 if (slides.length > 0) {
-                    console.log('✅ Found', slides.length, 'slides');
+                    console.log('✅ Found', slides.length, 'slides after', attempts, 'attempts');
                     resolve(slides);
                 } else {
-                    console.log('⏳ Waiting for slides...');
+                    console.log('⏳ Waiting for slides... (attempt', attempts + '/' + maxAttempts + ')');
                     setTimeout(checkSlides, 100);
                 }
             };
@@ -42,6 +71,11 @@
         try {
             console.log('📡 Fetching slides data...');
             const response = await fetch('/api/homepage/slides');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const data = await response.json();
             console.log('✅ Slides data loaded:', data.length, 'slides');
             return data;
@@ -68,10 +102,9 @@
             if (slideData.image) {
                 const imageUrl = slideData.image;
                 slide.style.backgroundImage = `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('${imageUrl}')`;
-		slide.style.backgroundRepeat = 'no-repeat';
                 slide.style.backgroundSize = 'cover';
                 slide.style.backgroundPosition = 'center';
-                slide.style.backgroundBlendMode = 'overlay';
+                slide.style.backgroundRepeat = 'no-repeat';
                 console.log(`✅ Set background image for slide ${index + 1}:`, imageUrl);
             }
             
@@ -99,78 +132,80 @@
                 console.log(`✅ Added introduction for slide ${index + 1}`);
             }
             
-            // Add button if it doesn't exist
+            // Add or update button if it doesn't exist
             if (slideData.button_text && slideData.button_url && !slideContent.querySelector('.slide-button')) {
                 const buttonElement = document.createElement('a');
                 buttonElement.className = 'slide-button';
-                buttonElement.href = slideData.button_url;
                 buttonElement.textContent = slideData.button_text;
-                buttonElement.target = slideData.open_method === 'new_tab' ? '_blank' : '_self';
-                if (buttonElement.target === '_blank') {
+                buttonElement.href = slideData.button_url;
+                
+                // Set target based on open_method
+                if (slideData.open_method === 'new_tab') {
+                    buttonElement.target = '_blank';
                     buttonElement.rel = 'noopener noreferrer';
                 }
+                
                 buttonElement.style.cssText = `
                     display: inline-block;
-                    background-color: #97bc62;
+                    background-color: #28a745;
                     color: white;
                     padding: 12px 24px;
-                    border-radius: 6px;
                     text-decoration: none;
-                    font-weight: 600;
-                    margin-top: 1.5rem;
+                    border-radius: 5px;
+                    font-weight: bold;
+                    margin-top: 1rem;
                     transition: background-color 0.3s ease;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                    text-shadow: none;
                 `;
                 
                 // Add hover effect
                 buttonElement.addEventListener('mouseenter', () => {
-                    buttonElement.style.backgroundColor = '#7da050';
+                    buttonElement.style.backgroundColor = '#218838';
                 });
                 buttonElement.addEventListener('mouseleave', () => {
-                    buttonElement.style.backgroundColor = '#97bc62';
+                    buttonElement.style.backgroundColor = '#28a745';
                 });
                 
                 slideContent.appendChild(buttonElement);
                 console.log(`✅ Added button for slide ${index + 1}:`, slideData.button_text);
             }
         });
-        
-        console.log('🎉 Slider fix complete!');
     }
     
-    // Main function
-    async function fixSlider() {
+    // Main initialization function
+    async function initSliderFix() {
         try {
-            console.log('🚀 Starting slider fix...');
+            console.log('🚀 Starting slider fix initialization...');
             
-            // Wait for DOM and slides
+            // Wait for DOM to be ready
             await waitForDOM();
+            console.log('✅ DOM ready');
+            
+            // Wait for slides to be rendered
             const slides = await waitForSlides();
-            
-            // Fetch slides data
-            const slidesData = await fetchSlidesData();
-            
-            if (slidesData.length === 0) {
-                console.error('❌ No slides data available');
+            if (slides.length === 0) {
+                console.warn('⚠️ No slides found, skipping slider fix');
                 return;
             }
             
-            // Apply the fix
+            // Fetch slides data
+            const slidesData = await fetchSlidesData();
+            if (slidesData.length === 0) {
+                console.warn('⚠️ No slides data available, skipping slider fix');
+                return;
+            }
+            
+            // Apply slide data to DOM
             applySlideData(slides, slidesData);
+            
+            console.log('🎉 Slider fix complete!');
             
         } catch (error) {
             console.error('❌ Slider fix failed:', error);
         }
     }
     
-    // Run the fix
-    fixSlider();
-    
-    // Also run the fix when the page becomes visible (in case of navigation)
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-            setTimeout(fixSlider, 500);
-        }
-    });
+    // Start the slider fix
+    initSliderFix();
     
 })();

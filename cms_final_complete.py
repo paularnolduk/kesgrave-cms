@@ -9,12 +9,14 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from sqlalchemy.ext.automap import automap_base
 from urllib.parse import unquote
 from datetime import datetime, date
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
 CORS(app)
 
 # Configuration for Flask-Login
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'kesgrave-cms-secret-key-2025')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
 # Initialize Flask-Login
 login_manager = LoginManager()
@@ -33,28 +35,97 @@ def load_user(user_id):
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-# Database configuration - FIXED for Render
-if os.environ.get("RENDER"):
-    # On Render, use persistent database in /opt/render/project/src
-    persistent_db_path = "/opt/render/project/src/kesgrave_working.db"
-    original_path = os.path.join(basedir, "instance", "kesgrave_working.db")
+# SMART DATABASE DETECTION - Find the database with actual content
+def find_working_database():
+    """Find the database that actually contains data"""
+    possible_paths = [
+        "/tmp/kesgrave_working.db",  # Original Render location
+        "/opt/render/project/src/kesgrave_working.db",  # Persistent location
+        os.path.join(basedir, "instance", "kesgrave_working.db"),  # Local instance
+        os.path.join(basedir, "kesgrave_working.db"),  # Root level
+    ]
     
-    # Copy database to persistent location if it doesn't exist
-    if not os.path.exists(persistent_db_path):
-        os.makedirs(os.path.dirname(persistent_db_path), exist_ok=True)
-        if os.path.exists(original_path):
-            import shutil
-            shutil.copyfile(original_path, persistent_db_path)
-            print(f"📁 Copied database to persistent location: {persistent_db_path}")
+    best_db = None
+    max_content = 0
     
-    db_path = persistent_db_path
-    print(f"📁 Render environment - using persistent database: {db_path}")
-else:
-    db_path = os.path.join(basedir, "instance", "kesgrave_working.db")
-    print(f"📁 Local environment - using database: {db_path}")
+    for db_path in possible_paths:
+        if os.path.exists(db_path):
+            try:
+                # Check how much content this database has
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                
+                # Count total records across key tables
+                total_records = 0
+                tables_to_check = ['slide', 'councillor', 'event', 'meeting']
+                
+                for table in tables_to_check:
+                    try:
+                        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                        count = cursor.fetchone()[0]
+                        total_records += count
+                        print(f"📊 {db_path} - {table}: {count} records")
+                    except:
+                        pass  # Table might not exist
+                
+                conn.close()
+                
+                print(f"📊 {db_path} - Total records: {total_records}")
+                
+                if total_records > max_content:
+                    max_content = total_records
+                    best_db = db_path
+                    
+            except Exception as e:
+                print(f"❌ Error checking {db_path}: {e}")
+    
+    if best_db:
+        print(f"✅ Using database with most content: {best_db} ({max_content} records)")
+        
+        # If we found data in /tmp, copy it to persistent location for future use
+        if best_db == "/tmp/kesgrave_working.db" and os.environ.get("RENDER"):
+            persistent_path = "/opt/render/project/src/kesgrave_working.db"
+            try:
+                os.makedirs(os.path.dirname(persistent_path), exist_ok=True)
+                import shutil
+                shutil.copyfile(best_db, persistent_path)
+                print(f"📁 Copied data to persistent location: {persistent_path}")
+                return persistent_path
+            except Exception as e:
+                print(f"⚠️ Could not copy to persistent location: {e}")
+                return best_db
+        
+        return best_db
+    else:
+        # No existing database found, create new one
+        if os.environ.get("RENDER"):
+            new_path = "/opt/render/project/src/kesgrave_working.db"
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+        else:
+            new_path = os.path.join(basedir, "instance", "kesgrave_working.db")
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+        
+        print(f"📁 Creating new database: {new_path}")
+        return new_path
 
+# Find and use the best database
+db_path = find_working_database()
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+# Upload configuration
+if os.environ.get("RENDER"):
+    upload_path = "/opt/render/project/src/uploads"
+else:
+    upload_path = os.path.join(basedir, "uploads")
+
+app.config['UPLOAD_FOLDER'] = upload_path
+os.makedirs(upload_path, exist_ok=True)
+
+# Create upload subdirectories
+upload_dirs = ['slides', 'councillors', 'events', 'meetings', 'content']
+for upload_dir in upload_dirs:
+    os.makedirs(os.path.join(upload_path, upload_dir), exist_ok=True)
 
 db = SQLAlchemy(app)
 
@@ -101,6 +172,9 @@ def init_models():
         
         print("✅ Models initialized successfully")
         
+        # Print available tables for debugging
+        print("📋 Available tables:", list(Base.classes.keys()))
+        
     except Exception as e:
         print(f"❌ Error initializing models: {e}")
 
@@ -138,6 +212,37 @@ def safe_bool(value):
     if isinstance(value, str):
         return value.lower() in ('true', '1', 'yes', 'on')
     return bool(value)
+
+def allowed_file(filename, allowed_extensions):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
+def allowed_image_file(filename):
+    return allowed_file(filename, {'png', 'jpg', 'jpeg', 'gif', 'webp'})
+
+def save_uploaded_file(file, subfolder):
+    """Save uploaded file and return filename"""
+    try:
+        if file and file.filename:
+            # Generate unique filename
+            timestamp = int(datetime.now().timestamp())
+            original_filename = secure_filename(file.filename)
+            name, ext = os.path.splitext(original_filename)
+            filename = f"{name}_{timestamp}{ext}"
+            
+            # Create full path
+            upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], subfolder)
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            # Save file
+            file_path = os.path.join(upload_dir, filename)
+            file.save(file_path)
+            
+            print(f"✅ File saved: {file_path}")
+            return filename
+    except Exception as e:
+        print(f"❌ Error saving file: {e}")
+        flash(f'Error uploading file: {str(e)}', 'error')
+    return None
 
 # === ADMIN INTERFACE ROUTES ===
 
@@ -237,6 +342,109 @@ def admin_logout():
     flash('Logged out successfully!', 'success')
     return redirect(url_for('admin_login'))
 
+# Common sidebar for admin pages
+def get_admin_sidebar():
+    return '''
+    <div class="sidebar">
+        <div class="p-3 text-center border-bottom">
+            <h4>🏛️ Kesgrave CMS</h4>
+            <small>Content Management</small>
+        </div>
+        <nav class="nav flex-column">
+            <a class="nav-link" href="/cms/dashboard">
+                <i class="fas fa-tachometer-alt"></i>
+                Dashboard
+            </a>
+            <a class="nav-link" href="/cms/slides">
+                <i class="fas fa-images"></i>
+                Homepage Slides
+            </a>
+            <a class="nav-link" href="/cms/councillors">
+                <i class="fas fa-users"></i>
+                Councillors
+            </a>
+            <a class="nav-link" href="/cms/events">
+                <i class="fas fa-calendar-alt"></i>
+                Events
+            </a>
+            <a class="nav-link" href="/cms/meetings">
+                <i class="fas fa-gavel"></i>
+                Meetings
+            </a>
+            <a class="nav-link" href="/cms/content">
+                <i class="fas fa-file-alt"></i>
+                Content Pages
+            </a>
+            <div class="mt-4">
+                <a class="nav-link" href="/" target="_blank">
+                    <i class="fas fa-external-link-alt"></i>
+                    View Website
+                </a>
+                <a class="nav-link" href="/cms/logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Logout
+                </a>
+            </div>
+        </nav>
+    </div>
+    '''
+
+# Common CSS for admin pages
+admin_css = '''
+<style>
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 260px;
+    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    z-index: 1000;
+    overflow-y: auto;
+}
+.sidebar .nav-link {
+    color: rgba(255,255,255,0.8);
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+.sidebar .nav-link:hover {
+    background: rgba(255,255,255,0.1);
+    color: white;
+}
+.sidebar .nav-link i {
+    margin-right: 0.75rem;
+    width: 20px;
+}
+.main-content {
+    margin-left: 260px;
+    padding: 2rem;
+    min-height: 100vh;
+    background: #f8f9fa;
+}
+.stat-card {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease;
+}
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+    }
+    .main-content {
+        margin-left: 0;
+    }
+}
+</style>
+'''
+
 @app.route('/cms')
 @app.route('/cms/dashboard')
 @login_required
@@ -257,94 +465,10 @@ def admin_dashboard():
             <title>CMS Dashboard - Kesgrave Town Council</title>
             <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-            <style>
-                .sidebar {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    height: 100vh;
-                    width: 260px;
-                    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
-                    color: white;
-                    z-index: 1000;
-                    overflow-y: auto;
-                }
-                .sidebar .nav-link {
-                    color: rgba(255,255,255,0.8);
-                    padding: 0.75rem 1.5rem;
-                    display: flex;
-                    align-items: center;
-                    text-decoration: none;
-                    transition: all 0.3s ease;
-                }
-                .sidebar .nav-link:hover {
-                    background: rgba(255,255,255,0.1);
-                    color: white;
-                }
-                .sidebar .nav-link i {
-                    margin-right: 0.75rem;
-                    width: 20px;
-                }
-                .main-content {
-                    margin-left: 260px;
-                    padding: 2rem;
-                    min-height: 100vh;
-                    background: #f8f9fa;
-                }
-                .stat-card {
-                    background: white;
-                    border-radius: 10px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                    transition: transform 0.3s ease;
-                }
-                .stat-card:hover {
-                    transform: translateY(-5px);
-                }
-            </style>
+            {{ admin_css|safe }}
         </head>
         <body>
-            <div class="sidebar">
-                <div class="p-3 text-center border-bottom">
-                    <h4>🏛️ Kesgrave CMS</h4>
-                    <small>Content Management</small>
-                </div>
-                <nav class="nav flex-column">
-                    <a class="nav-link" href="/cms/dashboard">
-                        <i class="fas fa-tachometer-alt"></i>
-                        Dashboard
-                    </a>
-                    <a class="nav-link" href="/cms/slides">
-                        <i class="fas fa-images"></i>
-                        Homepage Slides
-                    </a>
-                    <a class="nav-link" href="/cms/councillors">
-                        <i class="fas fa-users"></i>
-                        Councillors
-                    </a>
-                    <a class="nav-link" href="/cms/events">
-                        <i class="fas fa-calendar-alt"></i>
-                        Events
-                    </a>
-                    <a class="nav-link" href="/cms/meetings">
-                        <i class="fas fa-gavel"></i>
-                        Meetings
-                    </a>
-                    <a class="nav-link" href="/cms/content">
-                        <i class="fas fa-file-alt"></i>
-                        Content Pages
-                    </a>
-                    <div class="mt-4">
-                        <a class="nav-link" href="/" target="_blank">
-                            <i class="fas fa-external-link-alt"></i>
-                            View Website
-                        </a>
-                        <a class="nav-link" href="/cms/logout">
-                            <i class="fas fa-sign-out-alt"></i>
-                            Logout
-                        </a>
-                    </div>
-                </nav>
-            </div>
+            {{ sidebar|safe }}
             
             <div class="main-content">
                 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -469,6 +593,8 @@ def admin_dashboard():
         </body>
         </html>
         ''', 
+        admin_css=admin_css,
+        sidebar=get_admin_sidebar(),
         slide_count=slide_count,
         councillor_count=councillor_count,
         event_count=event_count,
@@ -479,61 +605,148 @@ def admin_dashboard():
     except Exception as e:
         return f"Error loading dashboard: {str(e)}", 500
 
-# Placeholder routes for CMS sections
+# === SLIDES MANAGEMENT ===
 @app.route('/cms/slides')
 @login_required
 def admin_slides():
-    return render_template_string('''
-    <div class="container mt-5">
-        <h2>Homepage Slides Management</h2>
-        <p>This section will allow you to manage homepage slides.</p>
-        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
-    </div>
-    ''')
-
-@app.route('/cms/councillors')
-@login_required
-def admin_councillors():
-    return render_template_string('''
-    <div class="container mt-5">
-        <h2>Councillors Management</h2>
-        <p>This section will allow you to manage councillors.</p>
-        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
-    </div>
-    ''')
-
-@app.route('/cms/events')
-@login_required
-def admin_events():
-    return render_template_string('''
-    <div class="container mt-5">
-        <h2>Events Management</h2>
-        <p>This section will allow you to manage events.</p>
-        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
-    </div>
-    ''')
-
-@app.route('/cms/meetings')
-@login_required
-def admin_meetings():
-    return render_template_string('''
-    <div class="container mt-5">
-        <h2>Meetings Management</h2>
-        <p>This section will allow you to manage meetings.</p>
-        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
-    </div>
-    ''')
-
-@app.route('/cms/content')
-@login_required
-def admin_content():
-    return render_template_string('''
-    <div class="container mt-5">
-        <h2>Content Pages Management</h2>
-        <p>This section will allow you to manage content pages.</p>
-        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
-    </div>
-    ''')
+    try:
+        slides = []
+        if Slide:
+            slides = db.session.query(Slide).order_by(Slide.sort_order).all()
+        
+        return render_template_string('''
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Manage Slides - Kesgrave CMS</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+            {{ admin_css|safe }}
+        </head>
+        <body>
+            {{ sidebar|safe }}
+            
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1>Homepage Slides</h1>
+                    <a href="/cms/slides/add" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add New Slide
+                    </a>
+                </div>
+                
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                <div class="card">
+                    <div class="card-body">
+                        {% if slides %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Image</th>
+                                            <th>Title</th>
+                                            <th>Introduction</th>
+                                            <th>Button</th>
+                                            <th>Status</th>
+                                            <th>Order</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for slide in slides %}
+                                        <tr>
+                                            <td>
+                                                {% if slide.image %}
+                                                    <img src="/uploads/slides/{{ slide.image }}" class="img-thumbnail" style="width: 60px; height: 40px; object-fit: cover;">
+                                                {% else %}
+                                                    <div class="bg-light d-flex align-items-center justify-content-center" style="width: 60px; height: 40px;">
+                                                        <i class="fas fa-image text-muted"></i>
+                                                    </div>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ slide.title }}</td>
+                                            <td>{{ slide.introduction[:50] }}{% if slide.introduction|length > 50 %}...{% endif %}</td>
+                                            <td>
+                                                {% if slide.button_text %}
+                                                    <span class="badge bg-primary">{{ slide.button_text }}</span>
+                                                {% else %}
+                                                    <span class="text-muted">No button</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if slide.is_active %}
+                                                    <span class="badge bg-success">Active</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">Inactive</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ slide.sort_order }}</td>
+                                            <td>
+                                                <a href="/cms/slides/edit/{{ slide.id }}" class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                <button class="btn btn-sm btn-outline-danger" onclick="deleteSlide({{ slide.id }})">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-images fa-3x text-muted mb-3"></i>
+                                <h5>No slides found</h5>
+                                <p class="text-muted">Create your first homepage slide to get started.</p>
+                                <a href="/cms/slides/add" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i> Add First Slide
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+            <script>
+                function deleteSlide(id) {
+                    if (confirm('Are you sure you want to delete this slide?')) {
+                        fetch('/cms/slides/delete/' + id, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        }).then(response => {
+                            if (response.ok) {
+                                location.reload();
+                            } else {
+                                alert('Error deleting slide');
+                            }
+                        });
+                    }
+                }
+            </script>
+        </body>
+        </html>
+        ''', 
+        admin_css=admin_css,
+        sidebar=get_admin_sidebar(),
+        slides=slides)
+        
+    except Exception as e:
+        return f"Error loading slides: {str(e)}", 500
 
 # === ORIGINAL API ROUTES (RESTORED) ===
 
@@ -710,8 +923,7 @@ def serve_assets(filename):
 @app.route("/uploads/<path:filename>")
 def serve_uploads(filename):
     """Serve uploaded files from the uploads directory"""
-    uploads_dir = os.path.join(basedir, "uploads")
-    return send_from_directory(uploads_dir, filename)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # Route to serve slider fix script
 @app.route("/slider-fix.js")
@@ -738,4 +950,3 @@ def serve_frontend_paths(path):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-

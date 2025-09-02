@@ -1,55 +1,25 @@
 import os
-from flask import Flask, render_template_string, redirect, url_for, request, flash, jsonify, send_from_directory, make_response
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from flask_cors import CORS
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-import re
+import sqlite3
 import json
-import uuid
-from werkzeug.utils import secure_filename
+import re
+from flask import Flask, send_from_directory, jsonify, request, redirect, url_for, render_template_string, flash
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from sqlalchemy.ext.automap import automap_base
+from urllib.parse import unquote
+from datetime import datetime, date
 
-# Initialize Flask app
-app = Flask(__name__)
+app = Flask(__name__, static_folder="dist/assets", template_folder="dist")
+CORS(app)
 
-# Configuration - ADAPTED FOR RENDER
+# Configuration for Flask-Login
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'kesgrave-cms-secret-key-2025')
 
-# Database configuration - FIXED for Render deployment
-if os.environ.get("RENDER"):
-    # On Render, use a persistent SQLite database in /opt/render/project/src
-    db_path = "/opt/render/project/src/kesgrave_working.db"
-    uploads_path = "/opt/render/project/src/uploads"
-    print(f"📁 Render environment detected, using database: {db_path}")
-else:
-    # Local development
-    db_path = "kesgrave_working.db"
-    uploads_path = "uploads"
-    print(f"📁 Local environment, using database: {db_path}")
-
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = uploads_path
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
-
-# Create upload directories
-upload_dirs = ['councillors', 'content/images', 'content/downloads', 'events', 'meetings', 'homepage/logo', 'homepage/slides']
-for upload_dir in upload_dirs:
-    os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], upload_dir), exist_ok=True)
-
-# Initialize extensions
-db = SQLAlchemy(app)
+# Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'
-
-# Enable CORS for API endpoints
-CORS(app, origins=[
-    os.environ.get('FRONTEND_URL', 'http://localhost:3000'),
-    'https://kesgrave-cms.onrender.com',
-    'https://kesgravetowncouncil.onrender.com'
-])
+login_manager.login_view = 'admin_login'
 
 # User class for authentication
 class AdminUser(UserMixin):
@@ -61,322 +31,118 @@ class AdminUser(UserMixin):
 def load_user(user_id):
     return AdminUser(user_id)
 
-# Helper functions
-def format_uk_date(date_obj):
-    """Format datetime object to UK format DD/MM/YYYY"""
-    if isinstance(date_obj, datetime):
-        return date_obj.strftime('%d/%m/%Y')
-    return date_obj
+basedir = os.path.abspath(os.path.dirname(__file__))
 
-def format_uk_datetime(date_obj):
-    """Format datetime object to UK format DD/MM/YYYY HH:MM"""
-    if isinstance(date_obj, datetime):
-        return date_obj.strftime('%d/%m/%Y %H:%M')
-    return date_obj
+# Database configuration - FIXED for Render
+if os.environ.get("RENDER"):
+    # On Render, use persistent database in /opt/render/project/src
+    persistent_db_path = "/opt/render/project/src/kesgrave_working.db"
+    original_path = os.path.join(basedir, "instance", "kesgrave_working.db")
+    
+    # Copy database to persistent location if it doesn't exist
+    if not os.path.exists(persistent_db_path):
+        os.makedirs(os.path.dirname(persistent_db_path), exist_ok=True)
+        if os.path.exists(original_path):
+            import shutil
+            shutil.copyfile(original_path, persistent_db_path)
+            print(f"📁 Copied database to persistent location: {persistent_db_path}")
+    
+    db_path = persistent_db_path
+    print(f"📁 Render environment - using persistent database: {db_path}")
+else:
+    db_path = os.path.join(basedir, "instance", "kesgrave_working.db")
+    print(f"📁 Local environment - using database: {db_path}")
 
-def allowed_file(filename, allowed_extensions):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-def allowed_image_file(filename):
-    return allowed_file(filename, {'png', 'jpg', 'jpeg', 'gif', 'webp'})
+db = SQLAlchemy(app)
 
-def allowed_document_file(filename):
-    return allowed_file(filename, {'pdf', 'doc', 'docx', 'txt'})
+# Global variables for models
+Slide = None
+QuickLink = None
+Councillor = None
+Meeting = None
+Event = None
+ContentPage = None
+ContentCategory = None
+ContentGallery = None
+ContentDownload = None
+ContentLink = None
+MeetingType = None
+EventCategory = None
+Tag = None
+CouncillorTag = None
 
-def save_uploaded_file(file, subfolder, file_type='image'):
-    """Save uploaded file and return filename"""
+def init_models():
+    """Initialize models within application context"""
+    global Slide, QuickLink, Councillor, Meeting, Event, ContentPage, ContentCategory, ContentGallery, ContentDownload, ContentLink, MeetingType, EventCategory, Tag, CouncillorTag
+    
     try:
-        if file and file.filename:
-            # Generate unique filename
-            timestamp = int(datetime.now().timestamp())
-            original_filename = secure_filename(file.filename)
-            name, ext = os.path.splitext(original_filename)
-            filename = f"{name}_{timestamp}{ext}"
-            
-            # Create full path
-            upload_path = os.path.join(app.config['UPLOAD_FOLDER'], subfolder)
-            os.makedirs(upload_path, exist_ok=True)
-            
-            # Save file
-            file_path = os.path.join(upload_path, filename)
-            file.save(file_path)
-            
-            print(f"✅ File saved: {file_path}")
-            return filename
+        # Use automap to reflect existing database structure
+        Base = automap_base()
+        Base.prepare(autoload_with=db.engine)
+        
+        # Map existing tables
+        Slide = Base.classes.get('slide')
+        QuickLink = Base.classes.get('quick_link')
+        Councillor = Base.classes.get('councillor')
+        Meeting = Base.classes.get('meeting')
+        Event = Base.classes.get('event')
+        ContentPage = Base.classes.get('content_page')
+        ContentCategory = Base.classes.get('content_category')
+        ContentGallery = Base.classes.get('content_gallery')
+        ContentDownload = Base.classes.get('content_download')
+        ContentLink = Base.classes.get('content_link')
+        MeetingType = Base.classes.get('meeting_type')
+        EventCategory = Base.classes.get('event_category')
+        Tag = Base.classes.get('tag')
+        CouncillorTag = Base.classes.get('councillor_tag')
+        
+        print("✅ Models initialized successfully")
+        
     except Exception as e:
-        print(f"❌ Error saving file: {e}")
-        flash(f'Error uploading file: {str(e)}', 'error')
-    return None
+        print(f"❌ Error initializing models: {e}")
 
-# Database Models
-class Councillor(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    title = db.Column(db.String(100))
-    email = db.Column(db.String(100))
-    phone = db.Column(db.String(20))
-    bio = db.Column(db.Text)
-    image_filename = db.Column(db.String(255))
-    is_published = db.Column(db.Boolean, default=True)
-    sort_order = db.Column(db.Integer, default=0)
-    twitter_url = db.Column(db.String(255))
-    linkedin_url = db.Column(db.String(255))
-    facebook_url = db.Column(db.String(255))
-    instagram_url = db.Column(db.String(255))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    tags = db.relationship('Tag', secondary='councillor_tags', back_populates='councillors')
+# Initialize models
+with app.app_context():
+    init_models()
 
-class Tag(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False, unique=True)
-    color = db.Column(db.String(7), default='#007bff')  # Hex color
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    councillors = db.relationship('Councillor', secondary='councillor_tags', back_populates='tags')
+# Helper functions
+def safe_getattr(obj, attr, default=None):
+    """Safely get attribute from object"""
+    try:
+        return getattr(obj, attr, default)
+    except:
+        return default
 
-# Association table for many-to-many relationship
-councillor_tags = db.Table('councillor_tags',
-    db.Column('councillor_id', db.Integer, db.ForeignKey('councillor.id'), primary_key=True),
-    db.Column('tag_id', db.Integer, db.ForeignKey('tag.id'), primary_key=True)
-)
+def safe_string(value):
+    """Safely convert value to string"""
+    if value is None:
+        return ""
+    return str(value)
 
-class Event(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    date = db.Column(db.DateTime, nullable=False)
-    end_date = db.Column(db.DateTime)
-    location = db.Column(db.String(200))
-    image = db.Column(db.String(500))
-    category_id = db.Column(db.Integer, db.ForeignKey('event_category.id'))
-    is_featured = db.Column(db.Boolean, default=False)
-    website_url = db.Column(db.String(500))
-    booking_url = db.Column(db.String(500))
-    price = db.Column(db.String(50))
-    capacity = db.Column(db.Integer)
-    status = db.Column(db.String(20), default='active')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    category = db.relationship('EventCategory', back_populates='events')
+def safe_int(value):
+    """Safely convert value to int"""
+    try:
+        return int(value) if value is not None else 0
+    except:
+        return 0
 
-class EventCategory(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
-    color = db.Column(db.String(7), default='#007bff')
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    events = db.relationship('Event', back_populates='category')
+def safe_bool(value):
+    """Safely convert value to boolean"""
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in ('true', '1', 'yes', 'on')
+    return bool(value)
 
-class MeetingType(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
-    description = db.Column(db.Text)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    meetings = db.relationship('Meeting', back_populates='meeting_type')
+# === ADMIN INTERFACE ROUTES ===
 
-class Meeting(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    meeting_date = db.Column(db.Date, nullable=False)
-    meeting_time = db.Column(db.Time, nullable=False)
-    location = db.Column(db.String(200))
-    description = db.Column(db.Text)
-    meeting_type_id = db.Column(db.Integer, db.ForeignKey('meeting_type.id'), nullable=False)
-    
-    # File attachments
-    agenda_filename = db.Column(db.String(255))
-    minutes_filename = db.Column(db.String(255))
-    draft_minutes_filename = db.Column(db.String(255))
-    schedule_applications_filename = db.Column(db.String(255))
-    
-    # Boolean flags for frontend compatibility
-    has_agenda = db.Column(db.Boolean, default=False)
-    has_minutes = db.Column(db.Boolean, default=False)
-    has_draft_minutes = db.Column(db.Boolean, default=False)
-    has_schedule_applications = db.Column(db.Boolean, default=False)
-    
-    is_published = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    meeting_type = db.relationship('MeetingType', back_populates='meetings')
-
-class ContentCategory(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
-    slug = db.Column(db.String(100), nullable=False, unique=True)
-    description = db.Column(db.Text)
-    is_active = db.Column(db.Boolean, default=True)
-    sort_order = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    pages = db.relationship('ContentPage', back_populates='category')
-
-class ContentPage(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    slug = db.Column(db.String(200), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    excerpt = db.Column(db.Text)
-    category_id = db.Column(db.Integer, db.ForeignKey('content_category.id'), nullable=False)
-    is_published = db.Column(db.Boolean, default=True)
-    is_featured = db.Column(db.Boolean, default=False)
-    sort_order = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    category = db.relationship('ContentCategory', back_populates='pages')
-
-class HomepageSlide(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    introduction = db.Column(db.Text)
-    button_text = db.Column(db.String(100))
-    button_url = db.Column(db.String(500))
-    open_method = db.Column(db.String(20), default='same_tab')  # same_tab, new_tab
-    image = db.Column(db.String(500))
-    is_active = db.Column(db.Boolean, default=True)
-    is_featured = db.Column(db.Boolean, default=False)
-    sort_order = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-# Sidebar CSS for admin interface
-sidebar_css = '''
-.sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    width: 260px;
-    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
-    color: white;
-    z-index: 1000;
-    overflow-y: auto;
-}
-
-.sidebar .logo {
-    padding: 1.5rem;
-    text-align: center;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-}
-
-.sidebar .nav-item {
-    margin: 0.25rem 0;
-}
-
-.sidebar .nav-link {
-    color: rgba(255,255,255,0.8);
-    padding: 0.75rem 1.5rem;
-    display: flex;
-    align-items: center;
-    text-decoration: none;
-    transition: all 0.3s ease;
-}
-
-.sidebar .nav-link:hover {
-    background: rgba(255,255,255,0.1);
-    color: white;
-}
-
-.sidebar .nav-link.active {
-    background: rgba(255,255,255,0.2);
-    color: white;
-}
-
-.sidebar .nav-link i {
-    margin-right: 0.75rem;
-    width: 20px;
-}
-
-.main-content {
-    margin-left: 260px;
-    padding: 2rem;
-    min-height: 100vh;
-    background: #f8f9fa;
-}
-
-@media (max-width: 768px) {
-    .sidebar {
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
-    }
-    
-    .sidebar.show {
-        transform: translateX(0);
-    }
-    
-    .main-content {
-        margin-left: 0;
-    }
-}
-'''
-
-# Common sidebar navigation
-def get_sidebar_nav():
-    return '''
-    <div class="sidebar">
-        <div class="logo">
-            <h4>🏛️ Kesgrave CMS</h4>
-            <small>Content Management</small>
-        </div>
-        <nav class="nav flex-column">
-            <a class="nav-link" href="/dashboard">
-                <i class="fas fa-tachometer-alt"></i>
-                Dashboard
-            </a>
-            <a class="nav-link" href="/homepage">
-                <i class="fas fa-home"></i>
-                Homepage
-            </a>
-            <a class="nav-link" href="/councillors">
-                <i class="fas fa-users"></i>
-                Councillors
-            </a>
-            <a class="nav-link" href="/events">
-                <i class="fas fa-calendar-alt"></i>
-                Events
-            </a>
-            <a class="nav-link" href="/meetings">
-                <i class="fas fa-gavel"></i>
-                Meetings
-            </a>
-            <a class="nav-link" href="/content">
-                <i class="fas fa-file-alt"></i>
-                Content Pages
-            </a>
-            <div class="nav-item mt-4">
-                <a class="nav-link" href="/logout">
-                    <i class="fas fa-sign-out-alt"></i>
-                    Logout
-                </a>
-            </div>
-        </nav>
-    </div>
-    '''
-
-# Routes
-@app.route('/')
-def index():
-    return redirect(url_for('login'))
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
+@app.route('/cms/login', methods=['GET', 'POST'])
+def admin_login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -386,7 +152,7 @@ def login():
             user = AdminUser(1)
             login_user(user)
             next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+            return redirect(next_page) if next_page else redirect(url_for('admin_dashboard'))
         else:
             flash('Invalid username or password!', 'error')
     
@@ -396,7 +162,7 @@ def login():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Login - Kesgrave CMS</title>
+        <title>CMS Login - Kesgrave Town Council</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
             body {
@@ -449,11 +215,12 @@ def login():
                         <label class="form-label">Password</label>
                         <input type="password" class="form-control" name="password" required value="admin">
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Login</button>
+                    <button type="submit" class="btn btn-primary w-100">Login to CMS</button>
                 </form>
                 
                 <div class="text-center mt-3">
-                    <small class="text-muted">Default: admin / admin</small>
+                    <small class="text-muted">Default: admin / admin</small><br>
+                    <a href="/" class="btn btn-link btn-sm">← Back to Website</a>
                 </div>
             </div>
         </div>
@@ -463,255 +230,365 @@ def login():
     </html>
     ''')
 
-@app.route('/logout')
+@app.route('/cms/logout')
 @login_required
-def logout():
+def admin_logout():
     logout_user()
     flash('Logged out successfully!', 'success')
-    return redirect(url_for('login'))
+    return redirect(url_for('admin_login'))
 
-@app.route('/dashboard')
+@app.route('/cms')
+@app.route('/cms/dashboard')
 @login_required
-def dashboard():
-    # Get statistics
-    total_councillors = Councillor.query.count()
-    published_councillors = Councillor.query.filter_by(is_published=True).count()
-    total_events = Event.query.count()
-    total_meetings = Meeting.query.count()
-    total_content_pages = ContentPage.query.count()
-    total_slides = HomepageSlide.query.count()
-    
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Dashboard - Kesgrave CMS</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-        <style>
-            {{ sidebar_css|safe }}
-            .stat-card {
-                background: white;
-                border-radius: 10px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                transition: transform 0.3s ease;
-            }
-            .stat-card:hover {
-                transform: translateY(-5px);
-            }
-        </style>
-    </head>
-    <body>
-        {{ sidebar_nav|safe }}
-        
-        <div class="main-content">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1>Dashboard</h1>
-                <div class="text-muted">
-                    <i class="fas fa-user"></i> Welcome, {{ current_user.username }}
-                </div>
-            </div>
-            
-            <div class="row">
-                <div class="col-md-4 mb-4">
-                    <div class="stat-card p-4">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <h3 class="text-primary mb-0">{{ total_councillors }}</h3>
-                                <p class="text-muted mb-0">Councillors</p>
-                                <small class="text-success">{{ published_councillors }} published</small>
-                            </div>
-                            <div class="text-primary">
-                                <i class="fas fa-users fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-4 mb-4">
-                    <div class="stat-card p-4">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <h3 class="text-success mb-0">{{ total_events }}</h3>
-                                <p class="text-muted mb-0">Events</p>
-                            </div>
-                            <div class="text-success">
-                                <i class="fas fa-calendar-alt fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-4 mb-4">
-                    <div class="stat-card p-4">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <h3 class="text-info mb-0">{{ total_meetings }}</h3>
-                                <p class="text-muted mb-0">Meetings</p>
-                            </div>
-                            <div class="text-info">
-                                <i class="fas fa-gavel fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-4 mb-4">
-                    <div class="stat-card p-4">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <h3 class="text-warning mb-0">{{ total_content_pages }}</h3>
-                                <p class="text-muted mb-0">Content Pages</p>
-                            </div>
-                            <div class="text-warning">
-                                <i class="fas fa-file-alt fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-4 mb-4">
-                    <div class="stat-card p-4">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <h3 class="text-danger mb-0">{{ total_slides }}</h3>
-                                <p class="text-muted mb-0">Homepage Slides</p>
-                            </div>
-                            <div class="text-danger">
-                                <i class="fas fa-images fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="row">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5 class="mb-0">Quick Actions</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-3 mb-3">
-                                    <a href="/homepage" class="btn btn-outline-primary w-100">
-                                        <i class="fas fa-home"></i> Manage Homepage
-                                    </a>
-                                </div>
-                                <div class="col-md-3 mb-3">
-                                    <a href="/councillors/add" class="btn btn-outline-success w-100">
-                                        <i class="fas fa-user-plus"></i> Add Councillor
-                                    </a>
-                                </div>
-                                <div class="col-md-3 mb-3">
-                                    <a href="/events/add" class="btn btn-outline-info w-100">
-                                        <i class="fas fa-calendar-plus"></i> Add Event
-                                    </a>
-                                </div>
-                                <div class="col-md-3 mb-3">
-                                    <a href="/meetings/add" class="btn btn-outline-warning w-100">
-                                        <i class="fas fa-plus"></i> Add Meeting
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    </body>
-    </html>
-    ''', 
-    sidebar_css=sidebar_css,
-    sidebar_nav=get_sidebar_nav(),
-    total_councillors=total_councillors,
-    published_councillors=published_councillors,
-    total_events=total_events,
-    total_meetings=total_meetings,
-    total_content_pages=total_content_pages,
-    total_slides=total_slides)
-
-# Health check endpoint
-@app.route('/health')
-def health_check():
+def admin_dashboard():
     try:
-        # Test database connection
-        councillor_count = Councillor.query.count()
-        event_count = Event.query.count()
-        meeting_count = Meeting.query.count()
-        slide_count = HomepageSlide.query.count()
+        # Get statistics
+        slide_count = db.session.query(Slide).count() if Slide else 0
+        councillor_count = db.session.query(Councillor).count() if Councillor else 0
+        event_count = db.session.query(Event).count() if Event else 0
+        meeting_count = db.session.query(Meeting).count() if Meeting else 0
         
-        return jsonify({
-            "status": "healthy",
-            "database": "connected",
-            "database_path": db_path,
-            "counts": {
-                "councillors": councillor_count,
-                "events": event_count,
-                "meetings": meeting_count,
-                "slides": slide_count
-            },
-            "timestamp": datetime.utcnow().isoformat()
-        }), 200
+        return render_template_string('''
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>CMS Dashboard - Kesgrave Town Council</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+            <style>
+                .sidebar {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    height: 100vh;
+                    width: 260px;
+                    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
+                    color: white;
+                    z-index: 1000;
+                    overflow-y: auto;
+                }
+                .sidebar .nav-link {
+                    color: rgba(255,255,255,0.8);
+                    padding: 0.75rem 1.5rem;
+                    display: flex;
+                    align-items: center;
+                    text-decoration: none;
+                    transition: all 0.3s ease;
+                }
+                .sidebar .nav-link:hover {
+                    background: rgba(255,255,255,0.1);
+                    color: white;
+                }
+                .sidebar .nav-link i {
+                    margin-right: 0.75rem;
+                    width: 20px;
+                }
+                .main-content {
+                    margin-left: 260px;
+                    padding: 2rem;
+                    min-height: 100vh;
+                    background: #f8f9fa;
+                }
+                .stat-card {
+                    background: white;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    transition: transform 0.3s ease;
+                }
+                .stat-card:hover {
+                    transform: translateY(-5px);
+                }
+            </style>
+        </head>
+        <body>
+            <div class="sidebar">
+                <div class="p-3 text-center border-bottom">
+                    <h4>🏛️ Kesgrave CMS</h4>
+                    <small>Content Management</small>
+                </div>
+                <nav class="nav flex-column">
+                    <a class="nav-link" href="/cms/dashboard">
+                        <i class="fas fa-tachometer-alt"></i>
+                        Dashboard
+                    </a>
+                    <a class="nav-link" href="/cms/slides">
+                        <i class="fas fa-images"></i>
+                        Homepage Slides
+                    </a>
+                    <a class="nav-link" href="/cms/councillors">
+                        <i class="fas fa-users"></i>
+                        Councillors
+                    </a>
+                    <a class="nav-link" href="/cms/events">
+                        <i class="fas fa-calendar-alt"></i>
+                        Events
+                    </a>
+                    <a class="nav-link" href="/cms/meetings">
+                        <i class="fas fa-gavel"></i>
+                        Meetings
+                    </a>
+                    <a class="nav-link" href="/cms/content">
+                        <i class="fas fa-file-alt"></i>
+                        Content Pages
+                    </a>
+                    <div class="mt-4">
+                        <a class="nav-link" href="/" target="_blank">
+                            <i class="fas fa-external-link-alt"></i>
+                            View Website
+                        </a>
+                        <a class="nav-link" href="/cms/logout">
+                            <i class="fas fa-sign-out-alt"></i>
+                            Logout
+                        </a>
+                    </div>
+                </nav>
+            </div>
+            
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1>CMS Dashboard</h1>
+                    <div class="text-muted">
+                        <i class="fas fa-user"></i> Welcome, {{ current_user.username }}
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-3 mb-4">
+                        <div class="stat-card p-4">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1">
+                                    <h3 class="text-primary mb-0">{{ slide_count }}</h3>
+                                    <p class="text-muted mb-0">Homepage Slides</p>
+                                </div>
+                                <div class="text-primary">
+                                    <i class="fas fa-images fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 mb-4">
+                        <div class="stat-card p-4">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1">
+                                    <h3 class="text-success mb-0">{{ councillor_count }}</h3>
+                                    <p class="text-muted mb-0">Councillors</p>
+                                </div>
+                                <div class="text-success">
+                                    <i class="fas fa-users fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 mb-4">
+                        <div class="stat-card p-4">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1">
+                                    <h3 class="text-info mb-0">{{ event_count }}</h3>
+                                    <p class="text-muted mb-0">Events</p>
+                                </div>
+                                <div class="text-info">
+                                    <i class="fas fa-calendar-alt fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 mb-4">
+                        <div class="stat-card p-4">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1">
+                                    <h3 class="text-warning mb-0">{{ meeting_count }}</h3>
+                                    <p class="text-muted mb-0">Meetings</p>
+                                </div>
+                                <div class="text-warning">
+                                    <i class="fas fa-gavel fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Quick Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3 mb-3">
+                                        <a href="/cms/slides" class="btn btn-outline-primary w-100">
+                                            <i class="fas fa-images"></i> Manage Slides
+                                        </a>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <a href="/cms/councillors" class="btn btn-outline-success w-100">
+                                            <i class="fas fa-users"></i> Manage Councillors
+                                        </a>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <a href="/cms/events" class="btn btn-outline-info w-100">
+                                            <i class="fas fa-calendar-alt"></i> Manage Events
+                                        </a>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <a href="/cms/meetings" class="btn btn-outline-warning w-100">
+                                            <i class="fas fa-gavel"></i> Manage Meetings
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">System Status</h5>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Database:</strong> {{ db_path }}</p>
+                                <p><strong>Environment:</strong> {{ 'Render' if render_env else 'Local' }}</p>
+                                <p><strong>Status:</strong> <span class="badge bg-success">Online</span></p>
+                                <a href="/health" class="btn btn-sm btn-outline-secondary" target="_blank">
+                                    <i class="fas fa-heartbeat"></i> Health Check
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+        </body>
+        </html>
+        ''', 
+        slide_count=slide_count,
+        councillor_count=councillor_count,
+        event_count=event_count,
+        meeting_count=meeting_count,
+        db_path=db_path,
+        render_env=bool(os.environ.get("RENDER")))
+        
     except Exception as e:
-        return jsonify({
-            "status": "unhealthy", 
-            "error": str(e),
-            "database_path": db_path,
-            "timestamp": datetime.utcnow().isoformat()
-        }), 500
+        return f"Error loading dashboard: {str(e)}", 500
 
-# API Endpoints for Frontend
+# Placeholder routes for CMS sections
+@app.route('/cms/slides')
+@login_required
+def admin_slides():
+    return render_template_string('''
+    <div class="container mt-5">
+        <h2>Homepage Slides Management</h2>
+        <p>This section will allow you to manage homepage slides.</p>
+        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+    ''')
+
+@app.route('/cms/councillors')
+@login_required
+def admin_councillors():
+    return render_template_string('''
+    <div class="container mt-5">
+        <h2>Councillors Management</h2>
+        <p>This section will allow you to manage councillors.</p>
+        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+    ''')
+
+@app.route('/cms/events')
+@login_required
+def admin_events():
+    return render_template_string('''
+    <div class="container mt-5">
+        <h2>Events Management</h2>
+        <p>This section will allow you to manage events.</p>
+        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+    ''')
+
+@app.route('/cms/meetings')
+@login_required
+def admin_meetings():
+    return render_template_string('''
+    <div class="container mt-5">
+        <h2>Meetings Management</h2>
+        <p>This section will allow you to manage meetings.</p>
+        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+    ''')
+
+@app.route('/cms/content')
+@login_required
+def admin_content():
+    return render_template_string('''
+    <div class="container mt-5">
+        <h2>Content Pages Management</h2>
+        <p>This section will allow you to manage content pages.</p>
+        <a href="/cms/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+    ''')
+
+# === ORIGINAL API ROUTES (RESTORED) ===
+
 @app.route('/api/homepage/slides', methods=['GET', 'OPTIONS'])
-def api_homepage_slides():
+def get_homepage_slides():
     if request.method == 'OPTIONS':
-        response = make_response()
+        response = jsonify({})
         response.headers.add("Access-Control-Allow-Origin", "*")
         response.headers.add('Access-Control-Allow-Headers', "*")
         response.headers.add('Access-Control-Allow-Methods', "*")
         return response
     
     try:
-        slides = HomepageSlide.query.filter_by(is_active=True).order_by(HomepageSlide.sort_order).all()
+        if not Slide:
+            return jsonify([])
+        
+        slides = db.session.query(Slide).filter_by(is_active=True).order_by(Slide.sort_order).all()
         
         slides_data = []
         for slide in slides:
             slides_data.append({
-                "id": slide.id,
-                "title": slide.title,
-                "introduction": slide.introduction,
-                "button_text": slide.button_text,
-                "button_url": slide.button_url,
-                "open_method": slide.open_method,
-                "image": slide.image,
-                "is_active": slide.is_active,
-                "is_featured": slide.is_featured,
-                "sort_order": slide.sort_order
+                "id": safe_getattr(slide, 'id'),
+                "title": safe_string(safe_getattr(slide, 'title')),
+                "introduction": safe_string(safe_getattr(slide, 'introduction')),
+                "button_text": safe_string(safe_getattr(slide, 'button_text')),
+                "button_url": safe_string(safe_getattr(slide, 'button_url')),
+                "open_method": safe_string(safe_getattr(slide, 'open_method', 'same_tab')),
+                "image": safe_string(safe_getattr(slide, 'image')),
+                "is_active": safe_bool(safe_getattr(slide, 'is_active')),
+                "is_featured": safe_bool(safe_getattr(slide, 'is_featured')),
+                "sort_order": safe_int(safe_getattr(slide, 'sort_order'))
             })
         
-        response = make_response(jsonify(slides_data))
+        response = jsonify(slides_data)
         response.headers.add("Access-Control-Allow-Origin", "*")
         return response
         
     except Exception as e:
-        response = make_response(jsonify({"error": str(e)}), 500)
+        response = jsonify({"error": str(e)})
         response.headers.add("Access-Control-Allow-Origin", "*")
-        return response
+        return response, 500
 
 @app.route('/api/events', methods=['GET'])
-def api_events():
+def get_events():
     try:
+        if not Event:
+            return jsonify({"events": []})
+        
         # Get query parameters
         month = request.args.get('month', type=int)
         year = request.args.get('year', type=int)
         include_past = request.args.get('include_past', 'false').lower() == 'true'
         
-        # Build query
-        query = Event.query.join(EventCategory, isouter=True)
+        # Build base query
+        query = db.session.query(Event)
         
         # Filter by month/year if provided
         if month and year:
@@ -734,28 +611,41 @@ def api_events():
         
         for event in events:
             # Determine if event is in the past
-            is_past = event.date < current_date
+            event_date = safe_getattr(event, 'date')
+            is_past = event_date < current_date if event_date else False
+            
+            # Get category info
+            category_data = None
+            if EventCategory:
+                try:
+                    category_id = safe_getattr(event, 'category_id')
+                    if category_id:
+                        category = db.session.query(EventCategory).filter_by(id=category_id).first()
+                        if category:
+                            category_data = {
+                                "id": safe_getattr(category, 'id'),
+                                "name": safe_string(safe_getattr(category, 'name')),
+                                "color": safe_string(safe_getattr(category, 'color', '#007bff'))
+                            }
+                except:
+                    pass
             
             event_data = {
-                "id": event.id,
-                "title": event.title,
-                "description": event.description,
-                "date": event.date.isoformat() if event.date else None,
-                "end_date": event.end_date.isoformat() if event.end_date else None,
-                "location": event.location,
-                "image": event.image,
-                "is_featured": event.is_featured,
+                "id": safe_getattr(event, 'id'),
+                "title": safe_string(safe_getattr(event, 'title')),
+                "description": safe_string(safe_getattr(event, 'description')),
+                "date": event_date.isoformat() if event_date else None,
+                "end_date": safe_getattr(event, 'end_date').isoformat() if safe_getattr(event, 'end_date') else None,
+                "location": safe_string(safe_getattr(event, 'location')),
+                "image": safe_string(safe_getattr(event, 'image')),
+                "is_featured": safe_bool(safe_getattr(event, 'is_featured')),
                 "is_past": is_past,
-                "website_url": event.website_url,
-                "booking_url": event.booking_url,
-                "price": event.price,
-                "capacity": event.capacity,
-                "status": event.status,
-                "category": {
-                    "id": event.category.id,
-                    "name": event.category.name,
-                    "color": event.category.color
-                } if event.category else None
+                "website_url": safe_string(safe_getattr(event, 'website_url')),
+                "booking_url": safe_string(safe_getattr(event, 'booking_url')),
+                "price": safe_string(safe_getattr(event, 'price')),
+                "capacity": safe_getattr(event, 'capacity'),
+                "status": safe_string(safe_getattr(event, 'status')),
+                "category": category_data
             }
             events_data.append(event_data)
         
@@ -764,60 +654,86 @@ def api_events():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Route to serve uploaded files
+# Health check endpoint
+@app.route('/health')
+def health_check():
+    try:
+        # Test database connection
+        slide_count = db.session.query(Slide).count() if Slide else 0
+        councillor_count = db.session.query(Councillor).count() if Councillor else 0
+        event_count = db.session.query(Event).count() if Event else 0
+        meeting_count = db.session.query(Meeting).count() if Meeting else 0
+        
+        return jsonify({
+            "status": "healthy",
+            "database": "connected",
+            "database_path": db_path,
+            "counts": {
+                "slides": slide_count,
+                "councillors": councillor_count,
+                "events": event_count,
+                "meetings": meeting_count
+            },
+            "admin_interface": "available at /cms/login",
+            "timestamp": datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy", 
+            "error": str(e),
+            "database_path": db_path,
+            "timestamp": datetime.utcnow().isoformat()
+        }), 500
+
+# === ORIGINAL FRONTEND SERVING ROUTES (RESTORED) ===
+
+@app.route("/admin")
+def admin_root():
+    # Redirect old admin route to new CMS
+    return redirect("/cms/login")
+
+@app.route("/admin/<path:path>")
+def serve_admin(path):
+    # Redirect old admin routes to new CMS
+    return redirect("/cms/login")
+
+@app.route("/login")
+def login():
+    # Redirect old login to new CMS login
+    return redirect("/cms/login")
+
+@app.route("/assets/<path:filename>")
+def serve_assets(filename):
+    return send_from_directory(os.path.join(app.static_folder), filename)
+
+# Route to serve uploaded images
 @app.route("/uploads/<path:filename>")
 def serve_uploads(filename):
     """Serve uploaded files from the uploads directory"""
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    uploads_dir = os.path.join(basedir, "uploads")
+    return send_from_directory(uploads_dir, filename)
 
 # Route to serve slider fix script
 @app.route("/slider-fix.js")
 def serve_slider_fix():
-    return send_from_directory(os.path.dirname(__file__), "slider-fix.js")
+    return send_from_directory(basedir, "slider-fix.js")
 
 # Route to serve events fix script
 @app.route("/events-fix.js")
 def serve_events_fix():
-    return send_from_directory(os.path.dirname(__file__), "events-fix.js")
+    return send_from_directory(basedir, "events-fix.js")
 
-# Create tables and initialize database
-with app.app_context():
-    try:
-        db.create_all()
-        print("✅ Database tables created/verified successfully")
-        
-        # Create default data if needed
-        if not EventCategory.query.first():
-            default_categories = [
-                EventCategory(name="Community Events", color="#28a745"),
-                EventCategory(name="Sports & Recreation", color="#007bff"),
-                EventCategory(name="Council Meetings", color="#6c757d"),
-                EventCategory(name="Cultural Events", color="#fd7e14")
-            ]
-            for category in default_categories:
-                db.session.add(category)
-        
-        if not MeetingType.query.first():
-            default_meeting_types = [
-                MeetingType(name="Full Council", description="Full Council meetings"),
-                MeetingType(name="Planning and Development", description="Planning and Development Committee"),
-                MeetingType(name="Finance and Governance", description="Finance and Governance Committee")
-            ]
-            for meeting_type in default_meeting_types:
-                db.session.add(meeting_type)
-        
-        db.session.commit()
-        print("✅ Default data created successfully")
-        
-        # Test database connection
-        councillor_count = Councillor.query.count()
-        event_count = Event.query.count()
-        meeting_count = Meeting.query.count()
-        slide_count = HomepageSlide.query.count()
-        print(f"📊 Database stats - Councillors: {councillor_count}, Events: {event_count}, Meetings: {meeting_count}, Slides: {slide_count}")
-        
-    except Exception as e:
-        print(f"❌ Error with database: {e}")
+# FRONTEND SERVING ROUTES (CRITICAL - RESTORED)
+@app.route("/")
+def serve_frontend():
+    return send_from_directory("dist", "index.html")
+
+@app.route("/<path:path>")
+def serve_frontend_paths(path):
+    # Exclude API, CMS, assets, and uploads from frontend serving
+    if path.startswith("api/") or path.startswith("cms/") or path.startswith("admin/") or path.startswith("assets/") or path.startswith("uploads/"):
+        return "Not Found", 404
+    return send_from_directory("dist", "index.html")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
